@@ -332,6 +332,17 @@ func (s *Store) ClaimDownload(ctx context.Context) (*Episode, error) {
 	return s.GetEpisodeAny(ctx, id)
 }
 
+// ClaimDownloadNow takes one episode for an immediate download (a client is
+// waiting for its file); false when a worker already has it.
+func (s *Store) ClaimDownloadNow(ctx context.Context, id int64) (bool, error) {
+	res, err := s.DB.ExecContext(ctx, `UPDATE episodes SET download = 'downloading', download_error = '' WHERE id = ? AND download IN ('none', 'queued', 'failed', 'culled')`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
 // ResetStaleDownloads puts episodes left "downloading" by a crash back in the queue.
 func (s *Store) ResetStaleDownloads(ctx context.Context) error {
 	_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET download = 'queued' WHERE download = 'downloading'`)

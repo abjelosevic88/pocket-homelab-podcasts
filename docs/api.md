@@ -23,7 +23,7 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 ## Episodes
 - `GET /episodes?q=&status=unplayed|partial|played|unfinished&downloaded=1|0&days=&kind=&podcast=&min_duration=&max_duration=&sort=newest|oldest|shortest|longest&limit=&offset=` → `{episodes[], total}`
 - `GET /episodes/{id}` → episode with `chapters[]` and `sponsors[]`
-- `GET /episodes/{id}/stream` — the downloaded file with range support (`?download=1` as attachment); redirects to the enclosure when not downloaded.
+- `GET /episodes/{id}/stream` — the episode's file with range support (`?download=1` as attachment). When it is not on the server yet it is downloaded right then and the response waits for it (a YouTube video takes a few seconds), so a phone or player can simply ask for the file; concurrent requests share one download.
 - `GET /episodes/{id}/artwork`
 - `POST /episodes/{id}/progress {position, listened, duration?, completed?}` — called by the player every ~10 s; `listened` seconds feed the stats.
 - `POST|DELETE /episodes/{id}/played` · `DELETE /episodes/{id}/history`

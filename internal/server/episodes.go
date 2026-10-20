@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -59,8 +61,11 @@ func (s *Server) decorateEpisode(e *store.Episode) {
 	switch {
 	case e.Download == store.DownloadDone && e.FilePath != "":
 		e.StreamURL = fmt.Sprintf("/api/v1/episodes/%d/stream", e.ID)
-	case e.PodcastKind == store.KindRSS && e.EnclosureURL != "":
+	case e.EnclosureURL != "" && e.YouTubeID == "":
 		e.StreamURL = e.EnclosureURL
+	case e.YouTubeID != "" && e.Download != store.DownloadFailed:
+		// the server fetches the video's audio when the player asks for it
+		e.StreamURL = fmt.Sprintf("/api/v1/episodes/%d/stream", e.ID)
 	}
 }
 
@@ -137,20 +142,65 @@ func (s *Server) handleDeleteEpisode(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleStream serves a downloaded file with range support (seeking).
+// ensureFile makes sure an episode's audio is on the server, downloading it
+// right away when it is not (a player or a phone is waiting for it). The
+// download runs on its own, so a client giving up does not waste it; the
+// request waits for it until its own context ends.
+func (s *Server) ensureFile(ctx context.Context, e *store.Episode) (*store.Episode, error) {
+	if e.Download == store.DownloadDone && e.FilePath != "" && !fileExists(filepath.Join(s.cfg.MediaDir, filepath.FromSlash(e.FilePath))) {
+		_ = s.store.ClearEpisodeFile(ctx, e.ID, store.DownloadNone) // the file went missing on disk
+	}
+	claimed, err := s.store.ClaimDownloadNow(ctx, e.ID)
+	if err != nil {
+		return nil, err
+	}
+	if claimed {
+		s.log.Info("downloading on request", "episode", e.Title)
+		go func(id int64) {
+			bg, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+			defer cancel()
+			if ep, err := s.store.GetEpisodeAny(bg, id); err == nil {
+				s.downloadEpisode(bg, ep)
+			}
+		}(e.ID)
+	}
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+	for {
+		cur, err := s.store.GetEpisodeAny(ctx, e.ID)
+		if err != nil {
+			return nil, err
+		}
+		switch cur.Download {
+		case store.DownloadDone:
+			if cur.FilePath != "" {
+				return cur, nil
+			}
+		case store.DownloadFailed:
+			return nil, errors.New(firstNonEmpty(cur.DownloadError, "the download failed"))
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-t.C:
+		}
+	}
+}
+
+// handleStream serves an episode's file with range support (seeking),
+// downloading it to the server first when it is not there yet.
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	e, err := s.store.GetEpisode(r.Context(), me(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get episode")
 		return
 	}
-	if e.FilePath == "" || e.Download != store.DownloadDone {
-		if e.EnclosureURL != "" {
-			http.Redirect(w, r, e.EnclosureURL, http.StatusFound)
+	if e.FilePath == "" || e.Download != store.DownloadDone || !fileExists(filepath.Join(s.cfg.MediaDir, filepath.FromSlash(e.FilePath))) {
+		// not on the server yet: fetch it now and answer with the file when it is there
+		if e, err = s.ensureFile(r.Context(), e); err != nil {
+			writeErr(w, http.StatusBadGateway, "could not get the audio: "+err.Error())
 			return
 		}
-		writeErr(w, http.StatusNotFound, "not downloaded")
-		return
 	}
 	s.serveMedia(w, r, e, queryBool(r, "download"))
 }

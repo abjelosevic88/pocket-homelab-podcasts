@@ -190,7 +190,7 @@ func (s *Server) Router() http.Handler {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.Timeout(120 * time.Second))
+		r.Use(timeoutExcept(120*time.Second, "/stream"))
 		r.Post("/auth/login", s.handleLogin)
 		r.Post("/auth/setup", s.handleSetup)
 		r.Get("/auth/status", s.handleAuthStatus)
@@ -508,4 +508,21 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	r.URL.Path = "/"
 	http.FileServerFS(s.webFS).ServeHTTP(w, r)
+}
+
+// timeoutExcept is chi's Timeout for every request except paths ending in
+// one of the suffixes (a stream may wait for its file to be downloaded).
+func timeoutExcept(d time.Duration, suffixes ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		timed := middleware.Timeout(d)(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			for _, suf := range suffixes {
+				if strings.HasSuffix(r.URL.Path, suf) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			timed.ServeHTTP(w, r)
+		})
+	}
 }
