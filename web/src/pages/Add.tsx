@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { Podcast, Preview, SearchResult } from '../lib/types'
+import type { Podcast, Preview, PreviewEpisode, SearchResult } from '../lib/types'
+import { safeHTML } from '../components/Player'
 import { Card, Empty, Field, Loading, PageHeader, Segmented, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
 import { Artwork } from '../components/Artwork'
 import { fmtDate, fmtDur } from '../lib/format'
@@ -93,10 +94,8 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState(false)
   const [picked, setPicked] = useState<Record<string, 'busy' | 'done'>>({})
-  const [showAll, setShowAll] = useState(false)
-  const [epQ, setEpQ] = useState('')
-  const [opts, setOpts] = useState({ download_limit: settings?.youtube_limit ?? 3, retention_days: settings?.retention_days ?? 0, min_duration: settings?.youtube_min_duration ?? 120, title_filter: '', auto_download: settings?.auto_download_default ?? false, notify: false, pub_date_mode: 'published' })
-  useEffect(() => { setPreview(null); setPicked({}); setShowAll(false); setEpQ('') }, [url])
+    const [opts, setOpts] = useState({ download_limit: settings?.youtube_limit ?? 3, retention_days: settings?.retention_days ?? 0, min_duration: settings?.youtube_min_duration ?? 120, title_filter: '', auto_download: settings?.auto_download_default ?? false, notify: false, pub_date_mode: 'published' })
+  useEffect(() => { setPreview(null); setPicked({}) }, [url])
   const lookup = async (u: string) => {
     setBusy(true)
     try { setPreview(await api.post<Preview>(`${V1}/preview`, { url: u })) } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
@@ -107,7 +106,7 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
   const pick = async (guid: string, title: string) => {
     if (!preview) return
     setPicked(p => ({ ...p, [guid]: 'busy' }))
-    try { const ep = await api.post<{ id: number }>(`${V1}/picks`, { feed_url: preview.url, guid, title }); setPicked(p => ({ ...p, [guid]: 'done' })); toast(`“${title}” is in your Picks and downloading`); if (!preview.subscribed_id) toast('Find it under Podcasts → Picks', 'ok'); void ep } catch (err) { setPicked(p => { const n = { ...p }; delete n[guid]; return n }); toast((err as Error).message, 'err') }
+    try { const ep = guid.startsWith('yt:') ? await api.post<{ id: number }>(`${V1}/youtube/video`, { url: `https://www.youtube.com/watch?v=${guid.slice(3)}` }) : await api.post<{ id: number }>(`${V1}/picks`, { feed_url: preview.url, guid, title }); setPicked(p => ({ ...p, [guid]: 'done' })); toast(`“${title}” is in your Picks and downloading`); if (!preview.subscribed_id) toast('Find it under Podcasts → Picks', 'ok'); void ep } catch (err) { setPicked(p => { const n = { ...p }; delete n[guid]; return n }); toast((err as Error).message, 'err') }
   }
   const subscribe = async () => {
     if (!preview) return
@@ -156,21 +155,7 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
               </div>
             </div>
             {preview.episodes && preview.episodes.length > 0 && (
-              <div className="mt">
-                <div className="row mb-sm"><b>Episodes</b><span className="muted small">{preview.kind === 'rss' ? '— take one without following the show' : ''}</span><span className="spacer" />{preview.episodes.length > 8 && <input value={epQ} onChange={e => setEpQ(e.target.value)} placeholder="Filter…" style={{ width: 160, padding: '4px 8px' }} />}</div>
-                <ul className="mini-list pick-list-eps">
-                  {preview.episodes.filter(e => !epQ || e.title.toLowerCase().includes(epQ.toLowerCase())).slice(0, showAll || epQ ? 60 : 8).map((e, i) => (
-                    <li key={e.guid || i}>
-                      <span className="grow" style={{ minWidth: 0 }}><span className="block" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={e.title}>{e.title}</span><span className="muted small">{[e.duration ? fmtDur(e.duration) : '', e.date && e.date.length >= 8 ? (e.date.length === 8 ? e.date.slice(0, 4) + '-' + e.date.slice(4, 6) + '-' + e.date.slice(6) : fmtDate(e.date)) : ''].filter(Boolean).join(' · ')}</span></span>
-                      {preview.kind === 'rss' && e.guid && e.has_audio !== false && (
-                        picked[e.guid] === 'done' ? <span className="badge ok-badge">✓ picked</span>
-                          : <button className="btn sm" onClick={() => pick(e.guid!, e.title)} disabled={picked[e.guid] === 'busy'} title="Download just this episode into your Picks">{picked[e.guid] === 'busy' ? '…' : '↓ Get'}</button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                {!showAll && !epQ && preview.episodes.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {Math.min(60, preview.episodes.length) - 8} more{preview.episode_count && preview.episode_count > 60 ? ` (of ${preview.episode_count})` : ''}</button>}
-              </div>
+              <PreviewEpisodes preview={preview} picked={picked} onPick={pick} />
             )}
             <div className="form-actions mt">
               {preview.subscribed_id ? <Link className="btn" to={`/podcasts/${preview.subscribed_id}`}>✓ Already following — open</Link> : <button className="btn primary lg" onClick={subscribe} disabled={busy}>{busy ? 'Adding…' : preview.kind === 'video' ? '↓ Download as episode' : '+ Subscribe'}</button>}
@@ -195,6 +180,59 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
           </Card>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Episodes of a looked-up show: thumbnail rows that expand in place with
+ *  the notes, a listen sample and "Get" (one episode into Picks). */
+function PreviewEpisodes({ preview, picked, onPick }: { preview: Preview; picked: Record<string, 'busy' | 'done'>; onPick: (guid: string, title: string) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [q, setQ] = useState('')
+  const eps = preview.episodes || []
+  const list = eps.filter(e => !q || e.title.toLowerCase().includes(q.toLowerCase())).slice(0, showAll || q ? eps.length : 8)
+  const yt = preview.kind === 'youtube'
+  const dateOf = (d: string) => !d ? '' : d.length === 8 ? fmtDate(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`) : fmtDate(d)
+  const key = (e: PreviewEpisode, i: number) => e.guid || String(i)
+  const get = (e: PreviewEpisode) => {
+    if (!e.guid || e.has_audio === false) return null
+    if (picked[e.guid] === 'done') return <span className="badge ok-badge">✓ in Picks</span>
+    return <button className="btn sm" onClick={ev => { ev.stopPropagation(); onPick(e.guid!, e.title) }} disabled={picked[e.guid] === 'busy'} title="Download just this one into your Picks">{picked[e.guid] === 'busy' ? '…' : '↓ Get'}</button>
+  }
+  return (
+    <div className="pv mt">
+      <div className="pv-head"><b>Episodes</b><span className="muted small">take one without following the show</span><span className="spacer" />{eps.length > 8 && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter…" className="pv-filter" />}</div>
+      <ul className="pv-list">
+        {list.map((e, i) => {
+          const k = key(e, i), isOpen = open === k
+          const meta = [dateOf(e.date), e.duration ? fmtDur(e.duration) : '', e.season ? `S${e.season}${e.episode ? ` E${e.episode}` : ''}` : e.episode ? `#${e.episode}` : ''].filter(Boolean).join(' · ')
+          return (
+            <li key={k} className={isOpen ? 'open' : ''}>
+              <div className="pv-row" role="button" tabIndex={0} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : k)} onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(isOpen ? null : k) } }}>
+                <Artwork src={e.image || preview.image} title={e.title} size="xs" />
+                <span className="pv-info"><span className="pv-title" title={e.title}>{e.title}</span><span className="muted small">{meta}</span></span>
+                {get(e)}
+                <span className={`pv-chev ${isOpen ? 'up' : ''}`} aria-hidden>⌄</span>
+              </div>
+              {isOpen && (
+                <div className="pv-detail">
+                  <div className="pv-detail-top">
+                    <Artwork src={e.image || preview.image} title={e.title} size="md" />
+                    <div className="pv-detail-head">
+                      {e.link && <a className="small" href={e.link} target="_blank" rel="noreferrer">{yt ? 'Watch on YouTube ↗' : 'Open the episode page ↗'}</a>}
+                      {!yt && e.audio && <audio className="pv-audio" controls preload="none" src={e.audio} />}
+                      {!yt && e.audio && <span className="muted small">Listen to a bit before you get it — streams from the publisher.</span>}
+                    </div>
+                  </div>
+                  {e.description ? <div className="md pv-notes" dangerouslySetInnerHTML={{ __html: safeHTML(e.description) }} /> : <p className="muted small" style={{ margin: 0 }}>{yt ? 'The video description arrives when you get it.' : 'No show notes.'}</p>}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {!showAll && !q && eps.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {eps.length - 8} more{preview.episode_count && preview.episode_count > eps.length ? ` (of ${preview.episode_count})` : ''}</button>}
     </div>
   )
 }

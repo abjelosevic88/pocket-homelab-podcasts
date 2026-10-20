@@ -435,9 +435,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 
 /* ---- episode page ---- */
 .epx { max-width: 1180px; }
-.epx-hero { position: relative; overflow: hidden; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+/* the hero does not clip (its ⋯ menu must overflow); only the backdrop layer does */
+.epx-hero { position: relative; z-index: 3; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+.epx-hero-bg { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
 .epx-backdrop { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(48px) saturate(1.3); opacity: .38; transform: scale(1.1); }
-.epx-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, color-mix(in srgb, var(--surface) 30%, transparent) 0%, color-mix(in srgb, var(--surface) 82%, transparent) 55%, var(--surface) 100%); pointer-events: none; }
+.epx-hero-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, color-mix(in srgb, var(--surface) 30%, transparent) 0%, color-mix(in srgb, var(--surface) 82%, transparent) 55%, var(--surface) 100%); pointer-events: none; }
 .epx-hero-inner { position: relative; z-index: 1; display: flex; gap: 32px; align-items: flex-start; padding: 32px; }
 .epx-art.art.lg { width: 232px; max-width: 232px; border-radius: 14px; box-shadow: 0 12px 34px rgba(0,0,0,.28); flex-shrink: 0; }
 .epx-head { flex: 1; min-width: 0; display: grid; gap: 10px; }
@@ -477,6 +479,7 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 @media (max-width: 1100px) { .epx-body { grid-template-columns: 1fr; } .epx-aside { position: static; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } }
 @media (max-width: 900px) {
   .epx-hero { border-radius: 14px; }
+  .epx-actions .menu { left: 50%; transform: translateX(-50%); }
   .epx-hero-inner { flex-direction: column; gap: 18px; padding: 20px; align-items: center; text-align: center; }
   .epx-art.art.lg { width: 180px; max-width: 180px; }
   .epx-head { justify-items: center; width: 100%; }
@@ -513,3 +516,27 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .pick-list-eps li { min-width: 0; }
 .pick-list-eps li > .grow { min-width: 0; overflow: hidden; }
 .field .segmented { align-self: flex-start; }
+
+/* ---- Add: episodes of a looked-up show ---- */
+.pv { min-width: 0; }
+.pv-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.pv-filter { width: 160px; padding: 4px 8px; }
+.pv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pv-list > li { border-radius: 10px; min-width: 0; }
+.pv-list > li.open { background: var(--surface-2); }
+.pv-row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 10px; cursor: pointer; min-width: 0; }
+.pv-row:hover { background: var(--surface-2); }
+.pv-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pv-row .art.xs { width: 48px; height: 48px; }
+.pv-info { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.pv-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-list > li.open .pv-title { white-space: normal; }
+.pv-chev { color: var(--muted); font-size: 16px; transition: transform .15s; flex-shrink: 0; width: 16px; text-align: center; }
+.pv-chev.up { transform: rotate(180deg); }
+.pv-detail { padding: 4px 12px 14px; display: grid; gap: 12px; min-width: 0; }
+.pv-detail-top { display: flex; gap: 14px; align-items: flex-start; }
+.pv-detail-top .art.md { width: 96px; height: 96px; }
+.pv-detail-head { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.pv-audio { width: 100%; height: 36px; }
+.pv-notes { font-size: 13.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; padding-right: 6px; overflow-wrap: anywhere; }
+.pv-notes a { word-break: normal; }

@@ -60,7 +60,7 @@ export interface SearchResult {
 
 export interface Preview {
   kind: 'rss' | 'youtube' | 'video'; youtube_kind?: string; url: string; title: string; author: string; image: string; description: string
-  episodes?: { title: string; duration: number; date: string; guid?: string; description?: string; image?: string; has_audio?: boolean }[]; episode_count?: number; duration?: number; subscribed_id?: number
+  episodes?: PreviewEpisode[]; episode_count?: number; duration?: number; subscribed_id?: number
 }
 
 export interface Stats {
@@ -71,3 +71,5 @@ export interface Stats {
 }
 
 export interface Home { continue: Episode[]; queue: Episode[]; fresh: Episode[]; recent: Episode[]; podcasts: Podcast[]; dashboard: Dashboard }
+
+export interface PreviewEpisode { title: string; duration: number; date: string; guid?: string; description?: string; image?: string; has_audio?: boolean; audio?: string; link?: string; season?: number; episode?: number }

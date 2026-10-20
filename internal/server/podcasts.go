@@ -121,14 +121,14 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"kind": "video", "url": norm, "title": info.Title, "author": info.Channel, "image": info.Thumbnail, "duration": info.Duration, "description": info.Description})
 			return
 		}
-		l, err := s.yt.Index(r.Context(), norm, 10)
+		l, err := s.yt.Index(r.Context(), norm, 30)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		items := []map[string]any{}
 		for _, e := range l.Entries {
-			items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": e.UploadDate})
+			items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": e.UploadDate, "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": true})
 		}
 		existing, _ := s.store.FindPodcastByFeed(r.Context(), me(r), norm)
 		out := map[string]any{"kind": "youtube", "youtube_kind": kind, "url": norm, "title": l.Title, "author": l.Uploader, "image": l.Thumbnail, "description": l.Description, "episodes": items}
@@ -153,7 +153,8 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 		if i == 60 {
 			break
 		}
-		items = append(items, map[string]any{"title": it.Title, "duration": it.Duration, "date": store.FormatTime(it.PubDate), "guid": it.GUID, "description": feed.StripHTML(it.Description), "image": it.Image, "has_audio": it.EnclosureURL != ""})
+		items = append(items, map[string]any{"title": it.Title, "duration": it.Duration, "date": store.FormatTime(it.PubDate), "guid": it.GUID, "description": it.Description, "image": it.Image,
+			"has_audio": it.EnclosureURL != "", "audio": it.EnclosureURL, "link": it.Link, "season": it.Season, "episode": it.Episode})
 	}
 	existing, _ := s.store.FindPodcastByFeed(r.Context(), me(r), u)
 	out := map[string]any{"kind": "rss", "url": u, "title": f.Title, "author": f.Author, "image": f.Image, "description": feed.StripHTML(f.Description), "episodes": items, "episode_count": len(f.Items)}

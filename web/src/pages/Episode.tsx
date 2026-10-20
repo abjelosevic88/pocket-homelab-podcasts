@@ -67,7 +67,7 @@ export default function EpisodePage() {
   return (
     <div className="epx">
       <section className="epx-hero">
-        {art && <div className="epx-backdrop" style={{ backgroundImage: `url("${art}")` }} aria-hidden />}
+        <div className="epx-hero-bg" aria-hidden>{art && <div className="epx-backdrop" style={{ backgroundImage: `url("${art}")` }} />}</div>
         <div className="epx-hero-inner">
           <Artwork src={art} title={showName} size="lg" className="epx-art" />
           <div className="epx-head">
