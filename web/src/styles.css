@@ -633,3 +633,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
   .yts-top { flex-direction: row; }
   .yt-thumb.channel { height: 72px; } .yt-thumb.channel img { width: 72px; height: 72px; }
 }
+
+/* ---- channel / playlist window over the search ---- */
+.peek-head { display: flex; gap: 14px; align-items: flex-start; }
+.peek-head .art.md { width: 88px; height: 88px; }
+.peek-title { font-size: 17px; line-height: 1.25; }
+.modal .pv { margin-top: 0; }
+@media (max-width: 600px) { .peek-head { flex-wrap: wrap; } .peek-head > .row { width: 100%; justify-content: flex-end; } }
+@media (max-width: 600px) { .pv-hint { display: none; } }

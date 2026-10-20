@@ -4,7 +4,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel, YTItem } from '../lib/types'
 import { safeHTML } from '../components/Player'
-import { Card, Empty, Field, Loading, PageHeader, Segmented, Tabs, useAsync, useDebounce, usePopover, useToast } from '../components/ui'
+import { Card, Empty, Field, Loading, Modal, PageHeader, Segmented, Tabs, useAsync, useDebounce, usePopover, useToast } from '../components/ui'
 import { Artwork } from '../components/Artwork'
 import { clock, compact, fmtDate, fmtDur } from '../lib/format'
 
@@ -204,7 +204,7 @@ function PreviewEpisodes({ preview, picked, onPick }: { preview: Preview; picked
   }
   return (
     <div className="pv mt">
-      <div className="pv-head"><b>Episodes</b><span className="muted small">take one without following the show</span><span className="spacer" />{eps.length > 8 && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter…" className="pv-filter" />}</div>
+      <div className="pv-head"><b>{yt ? 'Videos' : 'Episodes'}</b><span className="muted small pv-hint">take one without following the {yt ? 'channel' : 'show'}</span><span className="spacer" />{eps.length > 8 && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter…" className="pv-filter" />}</div>
       <ul className="pv-list">
         {list.map((e, i) => {
           const k = key(e, i), isOpen = open === k
@@ -301,6 +301,7 @@ const YT_LABEL = { channel: 'Channel', video: 'Video', playlist: 'Playlist' }
 function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactList?: boolean }) {
   const { toast } = useToast()
   const [done, setDone] = useState<Record<string, number | 'busy'>>({})
+  const [peek, setPeek] = useState<{ key: string; url: string; title: string } | null>(null)
   const run = async (key: string, fn: () => Promise<{ id: number }>, ok: (id: number) => string) => {
     setDone(d => ({ ...d, [key]: 'busy' }))
     try { const r = await fn(); setDone(d => ({ ...d, [key]: r.id })); toast(ok(r.id)) }
@@ -322,7 +323,7 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
                 {!compactList && c.description && <div className="muted small clamp2">{c.description}</div>}
               </div>
               <div className="row yt-actions">
-                <Link className="btn sm" to={`/add?tab=youtube&url=${encodeURIComponent(c.url)}`} title="See the latest videos first">Videos</Link>
+                <button className="btn sm" onClick={() => setPeek({ key: h.key, url: c.url, title: c.title })} title="See the latest videos first">Videos</button>
                 {typeof sub === 'number'
                   ? <Link className="btn sm" to={`/podcasts/${sub}`}>✓ Following</Link>
                   : <button className="btn primary sm" disabled={sub === 'busy'} title="New uploads will download automatically"
@@ -353,7 +354,7 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
                     : <button className="btn primary sm" disabled={have === 'busy' || v.live} title="Download as audio into your Picks"
                         onClick={() => run(h.key, () => api.post<{ id: number }>(`${V1}/youtube/video`, { url: v.url }), () => `“${v.title}” is downloading into your Picks`)}>{have === 'busy' ? 'Adding…' : '↓ Get'}</button>)
                 : <>
-                    <Link className="btn sm" to={`/add?tab=youtube&url=${encodeURIComponent(v.url)}`} title="See its videos first">Videos</Link>
+                    <button className="btn sm" onClick={() => setPeek({ key: h.key, url: v.url, title: v.title })} title="See its videos first">Videos</button>
                     {typeof have === 'number'
                       ? <Link className="btn sm" to={`/podcasts/${have}`}>✓ Following</Link>
                       : <button className="btn primary sm" disabled={have === 'busy'}
@@ -363,7 +364,57 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
           </li>
         )
       })}
+      {peek && <SourcePeek url={peek.url} title={peek.title} subscribedID={typeof done[peek.key] === 'number' ? done[peek.key] as number : (() => { const h = hits.find(x => x.key === peek.key); return h ? (h.kind === 'channel' ? h.c.subscribed_id : h.v.subscribed_id) : undefined })()}
+        onSubscribed={id => setDone(d => ({ ...d, [peek.key]: id }))} onClose={() => setPeek(null)} />}
     </ul>
+  )
+}
+
+/** A channel's or playlist's latest videos in a window over the search, so
+ *  the results stay where they were: subscribe, or take single videos. */
+function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: { url: string; title: string; subscribedID?: number; onSubscribed: (id: number) => void; onClose: () => void }) {
+  const { toast } = useToast()
+  const { data: preview, loading, error } = useAsync(() => api.post<Preview>(`${V1}/preview`, { url }), [url])
+  const [picked, setPicked] = useState<Record<string, 'busy' | 'done'>>({})
+  const [sub, setSub] = useState<number | 'busy' | undefined>(subscribedID)
+  const pick = async (guid: string, t: string) => {
+    setPicked(p => ({ ...p, [guid]: 'busy' }))
+    try {
+      if (guid.startsWith('yt:')) await api.post(`${V1}/youtube/video`, { url: `https://www.youtube.com/watch?v=${guid.slice(3)}` })
+      else await api.post(`${V1}/picks`, { feed_url: url, guid, title: t })
+      setPicked(p => ({ ...p, [guid]: 'done' })); toast(`“${t}” is downloading into your Picks`)
+    } catch (e) { setPicked(p => { const n = { ...p }; delete n[guid]; return n }); toast((e as Error).message, 'err') }
+  }
+  const subscribe = async () => {
+    setSub('busy')
+    try { const p = await api.post<Podcast>(`${V1}/podcasts`, { url }); setSub(p.id); onSubscribed(p.id); toast(`Subscribed to ${p.title} — the newest videos are downloading`) }
+    catch (e) { setSub(undefined); toast((e as Error).message, 'err') }
+  }
+  return (
+    <Modal title={preview?.title || title} onClose={onClose} size="lg">
+      {loading && !preview ? <Loading /> : error ? <div className="callout danger">{error}</div> : preview && (
+        <div className="grid" style={{ gap: 14 }}>
+          <div className="peek-head">
+            <Artwork src={preview.image} title={preview.title} size="md" className={preview.youtube_kind === 'channel' ? 'round' : ''} />
+            <div className="grid grow" style={{ gap: 4, minWidth: 0 }}>
+              <span className={`yt-badge ${preview.youtube_kind === 'playlist' ? 'playlist' : 'channel'}`} style={{ justifySelf: 'start' }}>{preview.youtube_kind === 'playlist' ? 'Playlist' : 'Channel'}</span>
+              <b className="peek-title">{preview.title}</b>
+              {preview.author && preview.author !== preview.title && <span className="muted small">{preview.author}</span>}
+              {preview.description && <span className="muted small clamp2">{preview.description}</span>}
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0, alignSelf: 'center' }}>
+              <a className="btn sm ghost" href={url} target="_blank" rel="noreferrer">YouTube ↗</a>
+              {typeof sub === 'number'
+                ? <Link className="btn sm" to={`/podcasts/${sub}`} onClick={onClose}>✓ Following</Link>
+                : <button className="btn primary sm" onClick={subscribe} disabled={sub === 'busy'} title="New uploads will download automatically">{sub === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
+            </div>
+          </div>
+          {preview.episodes && preview.episodes.length > 0
+            ? <PreviewEpisodes preview={preview} picked={picked} onPick={pick} />
+            : <p className="muted">No videos found.</p>}
+        </div>
+      )}
+    </Modal>
   )
 }
 
