@@ -78,7 +78,7 @@ function Playback() {
           </div>
           <Field label="Count as played at (%)" help="Reaching this far marks the episode played and drops it from the queue."><input type="number" min={50} max={100} value={f.complete_at} onChange={e => setF({ ...f, complete_at: Number(e.target.value) })} className="num" /></Field>
           <label className="row"><input type="checkbox" checked={f.auto_play_next} onChange={e => setF({ ...f, auto_play_next: e.target.checked })} style={{ width: 'auto' }} /> When an episode ends, play the next one in the queue</label>
-          <p className="muted small">Keyboard: <kbd>space</kbd> play/pause · <kbd>←</kbd> <kbd>→</kbd> skip · <kbd>shift</kbd>+<kbd>→</kbd> a minute · <kbd>&lt;</kbd> <kbd>&gt;</kbd> speed · <kbd>shift</kbd>+<kbd>N</kbd> next</p>
+          <p className="muted small">Keyboard: <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>/</kbd> search everything · <kbd>space</kbd> play/pause · <kbd>←</kbd> <kbd>→</kbd> skip · <kbd>shift</kbd>+<kbd>→</kbd> a minute · <kbd>&lt;</kbd> <kbd>&gt;</kbd> speed · <kbd>shift</kbd>+<kbd>N</kbd> next</p>
           <div><button className="btn primary" onClick={() => save()} disabled={busy}>Save</button></div>
         </div>
       </Card>

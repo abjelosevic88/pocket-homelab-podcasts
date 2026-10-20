@@ -49,6 +49,9 @@ It replaces PinePods for people who want the same ideas with less machinery: no 
 - Episode date can be the upload date or the download date (the latter keeps old videos you add later at the top of podcast apps).
 - `yt-dlp` updates itself from Settings, without a rebuild.
 
+**Search everything (⌘K / Ctrl+K)**
+- One box from anywhere in the app: your podcasts and episodes, the podcast directories and YouTube (channels, videos, playlists) at once, plus every page and a few actions. Scopes (All / Library / Podcasts / YouTube) with Tab, ↑↓ and Enter; Follow, Subscribe, Get and Play right in the results.
+
 **Listening**
 - Web player with resume, speed (0.8–2.5×), skip back/forward, chapters, sleep timer, keyboard shortcuts and lock-screen controls (Media Session API). Progress is saved every few seconds, so a phone and a laptop pick up where the other left off.
 - Up-next queue (reorderable), saved episodes, history, "mark as played", auto-play the next queued episode.

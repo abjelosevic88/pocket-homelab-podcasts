@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { usePlayer } from '../lib/player'
 import { Avatar } from './people'
 import { Player } from './Player'
+import { CommandPalette, isMac, openPalette } from './CommandPalette'
 
 const nav = [
   { to: '/home', label: 'Home', ico: '◉' },
@@ -32,6 +33,7 @@ export default function Layout() {
     <div className={`app ${player.current ? 'has-player' : ''}`}>
       <aside className={`sidebar ${open ? 'open' : ''}`} onClick={() => setOpen(false)}>
         <div className="brand"><span className="logo"><img src="/favicon.svg" alt="" /></span><span className="brand-name">{title}</span></div>
+        <button className="cmdk-trigger" onClick={e => { e.stopPropagation(); openPalette() }} title="Search everything"><span aria-hidden>⌕</span><span className="grow">Search…</span><kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd></button>
         <nav>
           {nav.map(n => <NavLink key={n.to} to={n.to} className={({ isActive }) => isActive ? 'active' : ''}><span className="ico">{n.ico}</span>{n.label}</NavLink>)}
         </nav>
@@ -48,10 +50,12 @@ export default function Layout() {
           <button className="btn ghost icon menu-btn" onClick={() => setOpen(o => !o)} aria-label="Menu">☰</button>
           <span className="topbar-title">{title}</span>
           <span className="spacer" />
+          <button className="btn ghost sm" onClick={openPalette} title="Search everything" aria-label="Search">⌕</button>
           <button className="btn ghost sm" onClick={toggleTheme} title="Toggle theme">{theme === 'dark' ? '☀' : '☾'}</button>
         </header>
         <main className="content"><Outlet /></main>
         <Player />
+        <CommandPalette />
         <nav className="tabbar">
           {nav.filter(n => tabs.includes(n.to)).map(n => <NavLink key={n.to} to={n.to} className={({ isActive }) => isActive ? 'active' : ''}><span className="ico">{n.ico}</span><span>{n.label}</span></NavLink>)}
         </nav>

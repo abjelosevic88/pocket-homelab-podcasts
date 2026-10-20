@@ -4,6 +4,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel, YTItem } from '../lib/types'
 import { safeHTML } from '../components/Player'
+import { searchYouTube, YT_KINDS, type YTHit, type YTKind } from '../lib/youtube'
 import { Card, Empty, Field, Loading, Modal, PageHeader, Segmented, Tabs, useAsync, useDebounce, usePopover, useToast } from '../components/ui'
 import { Artwork } from '../components/Artwork'
 import { clock, compact, fmtDate, fmtDur } from '../lib/format'
@@ -256,34 +257,6 @@ function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Previ
   )
 }
 
-type YTKind = 'all' | 'channel' | 'video' | 'playlist'
-const YT_KINDS: { value: YTKind; label: string }[] = [
-  { value: 'all', label: 'All of YouTube' },
-  { value: 'channel', label: 'Channels' },
-  { value: 'video', label: 'Videos' },
-  { value: 'playlist', label: 'Playlists' },
-]
-type YTHit = { kind: 'channel'; key: string; c: YTChannel } | { kind: 'video' | 'playlist'; key: string; v: YTItem }
-
-const ytGet = <T,>(type: string, q: string, limit: number) => api.get<{ results: T[] }>(`${V1}/youtube/search?type=${type}&q=${encodeURIComponent(q)}&limit=${limit}`).then(r => r.results).catch(() => [] as T[])
-
-/** Searches YouTube for one kind, or all three at once mixed into one list:
- *  the best channels first, then videos with playlists in between. */
-async function searchYouTube(q: string, kind: YTKind, small = false): Promise<YTHit[]> {
-  const ch = (cs: YTChannel[]): YTHit[] => cs.map(c => ({ kind: 'channel', key: 'c' + c.id, c }))
-  const it = (k: 'video' | 'playlist', vs: YTItem[]): YTHit[] => vs.map(v => ({ kind: k, key: k[0] + v.id, v }))
-  if (kind === 'channel') return ch(await ytGet<YTChannel>('channel', q, 12))
-  if (kind === 'video') return it('video', await ytGet<YTItem>('video', q, 20))
-  if (kind === 'playlist') return it('playlist', await ytGet<YTItem>('playlist', q, 12))
-  const [cs, vs, ps] = await Promise.all([ytGet<YTChannel>('channel', q, 12), ytGet<YTItem>('video', q, 20), ytGet<YTItem>('playlist', q, 12)])
-  const channels = ch(cs), videos = it('video', vs), playlists = it('playlist', ps)
-  const out: YTHit[] = [...channels.slice(0, small ? 1 : 2)]
-  let pi = 0
-  videos.slice(0, small ? 4 : 20).forEach((v, i) => { out.push(v); if (i % 4 === 2 && pi < (small ? 1 : 4) && playlists[pi]) out.push(playlists[pi++]) })
-  if (!small) out.push(...channels.slice(2, 5), ...playlists.slice(pi, pi + 2))
-  return out
-}
-
 /** One search box for YouTube: everything by default, a type filter in a dropdown. */
 function YouTubeSearch() {
   const [sp, setSp] = useSearchParams()
@@ -389,7 +362,7 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
 
 /** A channel's or playlist's latest videos in a window over the search, so
  *  the results stay where they were: subscribe, or take single videos. */
-function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: { url: string; title: string; subscribedID?: number; onSubscribed: (id: number) => void; onClose: () => void }) {
+export function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: { url: string; title: string; subscribedID?: number; onSubscribed: (id: number) => void; onClose: () => void }) {
   const { toast } = useToast()
   const { data: preview, loading, error } = useAsync(() => api.post<Preview>(`${V1}/preview`, { url }), [url])
   const [picked, setPicked] = useState<Record<string, 'busy' | 'done'>>({})
