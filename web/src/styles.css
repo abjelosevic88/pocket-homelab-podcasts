@@ -716,3 +716,17 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 @media (prefers-reduced-motion: reduce) {
   .modal-backdrop, .cmdk-backdrop, .modal, .cmdk, .player-full, .menu, .epf-panel, .sel-pop { animation: none !important; }
 }
+
+/* ---- playing on another device ---- */
+.player-bar.remote .pb-info { color: var(--text); }
+.player-bar.remote .pb-info:hover { text-decoration: none; }
+.player-bar.remote .s { display: flex; align-items: center; gap: 6px; }
+.remote-where { color: var(--accent-hover); font-weight: 600; }
+.remote-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.remote-dot.live { background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pp-pulse 1.6s ease-out infinite; }
+@keyframes pp-pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); } 80%, 100% { box-shadow: 0 0 0 7px rgba(34,197,94,0); } }
+.pb-progress.remote { cursor: default; }
+.pb-progress.remote .fill { background: #22c55e; transition: width .5s linear; }
+.remote-here { white-space: nowrap; }
+@media (max-width: 900px) { .remote-here { padding: 6px 10px; } }
+@media (prefers-reduced-motion: reduce) { .remote-dot.live { animation: none; } }

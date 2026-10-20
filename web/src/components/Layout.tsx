@@ -30,7 +30,7 @@ export default function Layout() {
   const logout = async () => { await api.post(`${V1}/auth/logout`); setUser(null); navigate('/login') }
   const title = settings?.title || 'Pocket Podcasts'
   return (
-    <div className={`app ${player.current ? 'has-player' : ''}`}>
+    <div className={`app ${player.current || player.remoteVisible ? 'has-player' : ''}`}>
       <aside className={`sidebar ${open ? 'open' : ''}`} onClick={() => setOpen(false)}>
         <div className="brand"><span className="logo"><img src="/favicon.svg" alt="" /></span><span className="brand-name">{title}</span></div>
         <button className="cmdk-trigger" onClick={e => { e.stopPropagation(); openPalette() }} title="Search everything"><span aria-hidden>⌕</span><span className="grow">Search…</span><kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd></button>

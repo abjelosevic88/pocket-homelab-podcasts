@@ -50,6 +50,7 @@ type Server struct {
 	refreshing   sync.Map // podcast id → true while a refresh runs
 	ytVersion    atomic.Value
 	ytc          ytChecker
+	now          nowHub
 	ytBusy       atomic.Bool
 
 	core    *core.Client
@@ -190,7 +191,7 @@ func (s *Server) Router() http.Handler {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(timeoutExcept(120*time.Second, "/stream"))
+		r.Use(timeoutExcept(120*time.Second, "/stream", "/events"))
 		r.Post("/auth/login", s.handleLogin)
 		r.Post("/auth/setup", s.handleSetup)
 		r.Get("/auth/status", s.handleAuthStatus)
@@ -243,6 +244,8 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/episodes/{id}/save", s.handleUnsave)
 			r.Delete("/episodes/{id}/history", s.handleForgetEpisode)
 
+			r.Get("/now-playing", s.handleNowPlaying)
+			r.Get("/now-playing/events", s.handleNowPlayingEvents)
 			r.Get("/queue", s.handleQueue)
 			r.Put("/queue", s.handleQueueReorder)
 			r.Delete("/queue", s.handleQueueClear)
@@ -526,3 +529,5 @@ func timeoutExcept(d time.Duration, suffixes ...string) func(http.Handler) http.
 		})
 	}
 }
+
+func jsonBytes(v any) ([]byte, error) { return json.Marshal(v) }

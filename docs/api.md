@@ -32,6 +32,7 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 
 ## Lists
 - `GET /home` — everything the Home page shows.
+- `GET /now-playing` → what is playing right now on any of your devices `{active, episode, position, duration, playing, rate, device, client, updated_at, server_time}`; `GET /now-playing/events` streams the same as server-sent events. Fed by `POST /episodes/{id}/progress` (send `client` from a browser tab so it can tell its own session apart); the device name comes from the Pocket Core device, the API token's name ("Iphone app" → iPhone) or the User-Agent.
 - `GET /queue` · `PUT /queue {ids[]}` · `DELETE /queue` · `GET /queue/next?after=`
 - `GET /history?limit=&offset=` · `DELETE /history`
 - `GET /saved` · `GET /downloads` → `{pending[], done[], bytes, yt_dlp}`

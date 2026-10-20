@@ -11,6 +11,7 @@ const RATES = [0.8, 1, 1.1, 1.2, 1.3, 1.5, 1.7, 2, 2.5]
 export function Player() {
   const p = usePlayer()
   const { settings } = useApp()
+  if (p.remoteVisible && p.remote) return <RemoteBar />
   if (!p.current) return null
   const e = p.current
   const dur = p.duration || e.duration || 0
@@ -127,4 +128,41 @@ export function safeHTML(html: string): string {
   walk(d)
   // bare URLs and timestamps become links
   return d.innerHTML.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer">$2</a>')
+}
+
+/** Another device is playing (the phone, another browser): its episode with a
+ *  clock that keeps ticking between reports, and "Continue here". */
+function RemoteBar() {
+  const p = usePlayer()
+  const r = p.remote!
+  const e = r.episode!
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!r.playing) { setNow(Date.now()); return }
+    const t = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(t)
+  }, [r.playing, r.updated_at])
+  const dur = r.duration || e.duration || 0
+  const elapsed = r.playing ? Math.max(0, (now + p.clockOffset - r.updated_at) / 1000) * (r.rate || 1) : 0
+  const pos = Math.min(dur || Infinity, r.position + elapsed)
+  const pct = dur ? Math.min(100, (pos / dur) * 100) : 0
+  const ago = Math.round((now + p.clockOffset - r.updated_at) / 60000)
+  const here = () => p.play({ ...e, play_position: Math.floor(pos), completed: false })
+  return (
+    <div className="player-bar remote" role="region" aria-label={`Playing on ${r.device}`}>
+      <div className="pb-progress remote"><span className="fill" style={{ width: `${pct}%` }} /></div>
+      <Link to={`/episodes/${e.id}`} className="pb-art"><Artwork src={e.artwork_url || e.podcast_artwork} title={e.podcast_title || e.title} size="xs" /></Link>
+      <Link to={`/episodes/${e.id}`} className="pb-info">
+        <div className="t">{e.title}</div>
+        <div className="s">
+          <span className={`remote-dot ${r.playing ? 'live' : ''}`} aria-hidden />
+          <span className="remote-where">{r.playing ? 'Playing' : 'Paused'} on {r.device}</span>
+          <span className="muted"> · {clock(pos)} / {clock(dur)}{!r.playing && ago >= 1 ? ` · ${ago} min ago` : ''}</span>
+        </div>
+      </Link>
+      <div className="pb-controls">
+        <button className="btn sm remote-here" onClick={here} title={`Continue in this browser from ${clock(pos)}`}>▶ Continue here</button>
+      </div>
+    </div>
+  )
 }

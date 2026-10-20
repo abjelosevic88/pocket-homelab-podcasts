@@ -150,6 +150,13 @@ func (s *Store) GetUserByAPIToken(ctx context.Context, token string) (*User, err
 	return u, nil
 }
 
+// APITokenName returns the name a token was given ("Iphone app"), "" when unknown.
+func (s *Store) APITokenName(ctx context.Context, token string) string {
+	var name string
+	_ = s.DB.QueryRowContext(ctx, `SELECT name FROM api_tokens WHERE token_hash = ?`, HashToken(token)).Scan(&name)
+	return name
+}
+
 // ListAPITokens lists tokens for a user.
 func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]APIToken, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT id, user_id, name, prefix, last_used_at, created_at FROM api_tokens WHERE user_id = ? ORDER BY id DESC`, userID)

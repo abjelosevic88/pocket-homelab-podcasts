@@ -54,6 +54,7 @@ It replaces PinePods for people who want the same ideas with less machinery: no 
 
 **Listening**
 - Web player with resume, speed (0.8–2.5×), skip back/forward, chapters, sleep timer, keyboard shortcuts and lock-screen controls (Media Session API). Progress is saved every few seconds, so a phone and a laptop pick up where the other left off.
+- **Playing on your phone, shown everywhere**: while the iPhone app (or another browser) plays, every open page shows it live in the bottom bar — "Playing on iPhone", the clock ticking, paused within a second — with **Continue here** to pick it up in the browser.
 - Up-next queue (reorderable), saved episodes, history, "mark as played", auto-play the next queued episode.
 - Smart playlists: filters over your episodes (unplayed / in progress / played, podcasts, length, age, on disk only, order, limit) that stay current. Five sensible ones are created for every person.
 - Home page: continue listening, up next, new episodes, recently played.

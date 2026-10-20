@@ -276,10 +276,11 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Position  int   `json:"position"`
-		Listened  int   `json:"listened"`
-		Duration  int   `json:"duration"`
-		Completed *bool `json:"completed"`
+		Position  int    `json:"position"`
+		Listened  int    `json:"listened"`
+		Duration  int    `json:"duration"`
+		Completed *bool  `json:"completed"`
+		Client    string `json:"client"` // a browser tab's id, so it can tell its own session from others
 	}
 	if err := decode(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -301,6 +302,7 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "save progress")
 		return
 	}
+	s.trackPlayback(r, me(r), e, in.Position, in.Listened, completed, strings.TrimSpace(in.Client))
 	if !wasPlayed && in.Listened > 0 {
 		s.publish(me(r), "podcasts.played", e.Title, map[string]any{"podcast_id": e.PodcastID, "podcast": e.PodcastTitle, "episode_id": e.ID, "title": e.Title, "duration": e.Duration})
 	}

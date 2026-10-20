@@ -8,6 +8,18 @@ import type { Chapter, Episode, EpisodeDetail, Segment } from './types'
  *  where it is, progress reports, sponsor skipping, chapters, sleep timer,
  *  lock-screen controls and keyboard shortcuts. */
 
+/** What another device (the phone, another browser) is playing right now. */
+export interface RemoteSession {
+  active: boolean; episode?: EpisodeDetail; position: number; duration: number; playing: boolean; rate: number
+  device: string; client: string; updated_at: number; server_time: number
+}
+
+/** This tab's id: its own progress reports are not shown back to it as "another device". */
+export const CLIENT_ID = (() => {
+  try { let id = sessionStorage.getItem('pp-client'); if (!id) { id = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('pp-client', id) } return id }
+  catch { return Math.random().toString(36).slice(2, 12) }
+})()
+
 interface PlayerState {
   current: EpisodeDetail | null
   playing: boolean
@@ -31,6 +43,9 @@ interface PlayerState {
   stop: () => void
   setExpanded: (v: boolean) => void
   isCurrent: (id: number) => boolean
+  remote: RemoteSession | null
+  remoteVisible: boolean
+  clockOffset: number
 }
 
 const Ctx = createContext<PlayerState>(null!)
@@ -69,7 +84,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     listened.current = 0
     lastReport.current = Date.now()
     try {
-      const r = await api.post<{ position: number; completed: boolean }>(`${V1}/episodes/${e.id}/progress`, { position: pos, listened: l, duration: Math.floor(audio.duration) || e.duration, completed: opts.completed })
+      const r = await api.post<{ position: number; completed: boolean }>(`${V1}/episodes/${e.id}/progress`, { position: pos, listened: l, duration: Math.floor(audio.duration) || e.duration, completed: opts.completed, client: CLIENT_ID })
       if (cur.current?.id === e.id) {
         cur.current = { ...cur.current, play_position: pos, completed: r.completed }
         window.dispatchEvent(new CustomEvent('pp:progress', { detail: { id: e.id, position: pos, completed: r.completed } }))
@@ -238,7 +253,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // report before the tab goes away
   useEffect(() => {
-    const h = () => { if (cur.current && listened.current > 0) { const e = cur.current; const body = JSON.stringify({ position: Math.floor(audio.currentTime), listened: Math.floor(listened.current), duration: Math.floor(audio.duration) || e.duration }); navigator.sendBeacon?.(`${V1}/episodes/${e.id}/progress`, new Blob([body], { type: 'application/json' })) } }
+    const h = () => { if (cur.current && listened.current > 0) { const e = cur.current; const body = JSON.stringify({ position: Math.floor(audio.currentTime), listened: Math.floor(listened.current), duration: Math.floor(audio.duration) || e.duration, client: CLIENT_ID }); navigator.sendBeacon?.(`${V1}/episodes/${e.id}/progress`, new Blob([body], { type: 'application/json' })) } }
     window.addEventListener('pagehide', h)
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') report({ force: true }) })
     return () => window.removeEventListener('pagehide', h)
@@ -256,6 +271,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => localStorage.removeItem(LAST_KEY))
   }, [applyMediaSession])
 
+  // what other devices play, pushed live by the server
+  const [remote, setRemote] = useState<RemoteSession | null>(null)
+  const [clockOffset, setClockOffset] = useState(0)
+  useEffect(() => {
+    let es: EventSource | null = null, retry: number | undefined, closed = false
+    const connect = () => {
+      es = new EventSource(`${V1}/now-playing/events`)
+      es.onmessage = ev => { try { const d = JSON.parse(ev.data) as RemoteSession; setClockOffset(d.server_time - Date.now()); setRemote(d.active ? d : null) } catch { /* ignore */ } }
+      es.onerror = () => { es?.close(); if (!closed) retry = window.setTimeout(connect, 5000) }
+    }
+    connect()
+    return () => { closed = true; es?.close(); if (retry) clearTimeout(retry) }
+  }, [])
+  const fromElsewhere = !!remote && remote.client !== CLIENT_ID
+  // another device wins while it plays and this tab does not; a paused one shows only when this tab has nothing loaded
+  const remoteVisible = fromElsewhere && !playing && (remote!.playing || !current)
+
   const chapter = useMemo(() => {
     const ch = current?.chapters || []
     let c: Chapter | null = null
@@ -266,6 +298,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const value: PlayerState = {
     current, playing, loading, time, duration: duration || current?.duration || 0, rate, sleepAt, chapter, chapters: current?.chapters || [], sponsors: current?.sponsors || [], expanded,
     play, toggle, pause, seek, skip, setRate, setSleep, next, stop, setExpanded, isCurrent: id => cur.current?.id === id,
+    remote: fromElsewhere ? remote : null, remoteVisible, clockOffset,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
