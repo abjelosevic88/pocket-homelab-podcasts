@@ -9,7 +9,7 @@ import (
 
 // SaveProgress stores where a person is in an episode and adds listened
 // seconds to today's listening. completed marks the episode played.
-func (s *Store) SaveProgress(ctx context.Context, userID, episodeID int64, position, listened int, completed bool) error {
+func (s *Store) SaveProgress(ctx context.Context, userID, episodeID int64, position, listened int, completed bool, after ...func(*sql.Tx, bool, bool) error) error {
 	if !s.ownsEpisode(ctx, userID, episodeID) {
 		return ErrNotFound
 	}
@@ -19,6 +19,13 @@ func (s *Store) SaveProgress(ctx context.Context, userID, episodeID int64, posit
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
+	var wasPlayed string
+	var wasDone int
+	err = tx.QueryRowContext(ctx, `SELECT last_played_at,completed FROM progress WHERE user_id=? AND episode_id=?`, userID, episodeID).Scan(&wasPlayed, &wasDone)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
 	var played int
 	if listened > 0 {
 		played = 1
@@ -44,24 +51,59 @@ func (s *Store) SaveProgress(ctx context.Context, userID, episodeID int64, posit
 			return err
 		}
 	}
+	for _, hook := range after {
+		if hook != nil {
+			if err := hook(tx, wasPlayed == "" && listened > 0, completed && wasDone == 0); err != nil {
+				return err
+			}
+		}
+	}
 	return tx.Commit()
 }
 
 // SetCompleted marks an episode played (position at the end) or unplayed.
-func (s *Store) SetCompleted(ctx context.Context, userID, episodeID int64, completed bool) error {
+func (s *Store) SetCompleted(ctx context.Context, userID, episodeID int64, completed bool, after ...func(*sql.Tx, bool, bool) error) error {
 	if !s.ownsEpisode(ctx, userID, episodeID) {
 		return ErrNotFound
 	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var wasPlayed string
+	var wasDone int
+	err = tx.QueryRowContext(ctx, `SELECT last_played_at,completed FROM progress WHERE user_id=? AND episode_id=?`, userID, episodeID).Scan(&wasPlayed, &wasDone)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	finish := func() error {
+		for _, hook := range after {
+			if hook != nil {
+				if err := hook(tx, false, completed && wasDone == 0); err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Commit()
+	}
+
 	if completed {
-		_, err := s.DB.ExecContext(ctx, `INSERT INTO progress (user_id, episode_id, position, completed, completed_at, last_played_at)
+		_, err := tx.ExecContext(ctx, `INSERT INTO progress (user_id, episode_id, position, completed, completed_at, last_played_at)
 			VALUES (?, ?, (SELECT duration FROM episodes WHERE id = ?), 1, ?, ?)
 			ON CONFLICT(user_id, episode_id) DO UPDATE SET completed = 1, completed_at = excluded.completed_at,
 			  last_played_at = CASE WHEN progress.last_played_at = '' THEN excluded.last_played_at ELSE progress.last_played_at END`,
 			userID, episodeID, episodeID, Now(), Now())
+		if err != nil {
+			return err
+		}
+		return finish()
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE progress SET completed = 0, completed_at = '', position = 0 WHERE user_id = ? AND episode_id = ?`, userID, episodeID)
+	if err != nil {
 		return err
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE progress SET completed = 0, completed_at = '', position = 0 WHERE user_id = ? AND episode_id = ?`, userID, episodeID)
-	return err
+	return finish()
 }
 
 // ClearHistory forgets a person's plays of one episode (or all when 0).

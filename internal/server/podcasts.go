@@ -304,7 +304,9 @@ func (s *Server) subscribe(ctx context.Context, uid int64, in subscribeInput) (*
 		}
 		p.Author, p.Description, p.ArtworkURL, p.SiteURL, p.Language, p.Categories, p.Explicit = f.Author, f.Description, f.Image, f.Link, f.Language, strings.Join(f.Categories, ", "), f.Explicit
 	}
-	if err := s.store.CreatePodcast(ctx, p); err != nil {
+	if err := s.store.CreatePodcast(ctx, p, s.personEvent(ctx, uid, func() (string, string, map[string]any) {
+		return "podcasts.subscribed", p.Title, map[string]any{"podcast_id": p.ID, "title": p.Title, "kind": p.Kind, "url": p.FeedURL}
+	})); err != nil {
 		if errors.Is(err, store.ErrConflict) {
 			return nil, &subscribeError{http.StatusConflict, "you already follow this one"}
 		}
@@ -315,7 +317,7 @@ func (s *Server) subscribe(ctx context.Context, uid int64, in subscribeInput) (*
 		s.log.Warn("first refresh failed", "podcast", p.Title, "err", err)
 	}
 	s.store.AddActivity(ctx, uid, "subscribe", fmt.Sprintf("Subscribed to %s (%d episode%s)", p.Title, n, plural(n)), p.ID, 0)
-	s.publish(uid, "podcasts.subscribed", p.Title, map[string]any{"podcast_id": p.ID, "title": p.Title, "kind": p.Kind, "url": p.FeedURL})
+
 	if p.ArtworkFile == "" {
 		go s.cacheArtwork(context.Background(), p) // the first refresh failed before caching it
 	}
@@ -450,7 +452,9 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "get podcast")
 		return
 	}
-	files, err := s.store.DeletePodcast(ctx, me(r), p.ID)
+	files, err := s.store.DeletePodcast(ctx, me(r), p.ID, s.personEvent(ctx, me(r), func() (string, string, map[string]any) {
+		return "podcasts.unsubscribed", p.Title, map[string]any{"podcast_id": p.ID, "title": p.Title, "kind": p.Kind}
+	}))
 	if err != nil {
 		s.fail(w, err, "unsubscribe")
 		return
@@ -463,7 +467,7 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		_ = os.Remove(filepath.Join(s.cfg.ArtworkDir, p.ArtworkFile))
 	}
 	s.store.AddActivity(ctx, me(r), "unsubscribe", "Unsubscribed from "+p.Title, 0, 0)
-	s.publish(me(r), "podcasts.unsubscribed", p.Title, map[string]any{"podcast_id": p.ID, "title": p.Title, "kind": p.Kind})
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -127,9 +127,6 @@ func (s *Server) refreshPodcast(ctx context.Context, p *store.Podcast, listing *
 	}
 	if len(created) > 0 {
 		s.store.AddActivity(ctx, p.UserID, "refresh", fmt.Sprintf("%s: %d new episode%s", p.Title, len(created), plural(len(created))), p.ID, 0)
-		for _, e := range created {
-			s.publish(p.UserID, "podcasts.episode_added", e.Title, map[string]any{"podcast_id": p.ID, "podcast": p.Title, "episode_id": e.ID, "title": e.Title, "pub_date": e.PubDate, "duration": e.Duration})
-		}
 		if !first && p.Notify {
 			s.notifyNew(ctx, p, created)
 		}
@@ -180,7 +177,7 @@ func (s *Server) refreshRSS(ctx context.Context, p *store.Podcast, first bool) (
 		if e.Title == "" {
 			e.Title = "Untitled"
 		}
-		isNew, err := s.store.UpsertEpisode(ctx, &e)
+		isNew, err := s.store.UpsertEpisode(ctx, &e, s.episodeAdded(ctx, p, &e))
 		if err != nil {
 			return nil, err
 		}
@@ -261,13 +258,13 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 			PubDate: pub, ArtworkURL: en.Thumbnail, YouTubeID: en.ID, Position: i}
 		if id, ok := known[en.ID]; ok {
 			e.ID = id
-			e.PubDate = ""                                            // the listing's date is approximate; keep the exact one the download stored
-			if _, err := s.store.UpsertEpisode(ctx, &e); err != nil { // keeps the row, refreshes position/title
+			e.PubDate = ""                                                                        // the listing's date is approximate; keep the exact one the download stored
+			if _, err := s.store.UpsertEpisode(ctx, &e, s.episodeAdded(ctx, p, &e)); err != nil { // keeps the row, refreshes position/title
 				return nil, err
 			}
 			continue
 		}
-		isNew, err := s.store.UpsertEpisode(ctx, &e)
+		isNew, err := s.store.UpsertEpisode(ctx, &e, s.episodeAdded(ctx, p, &e))
 		if err != nil {
 			return nil, err
 		}
@@ -475,12 +472,14 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 			s.fetchChapters(ctx, e)
 		}
 	}
-	if err := s.store.SetEpisodeFile(ctx, e.ID, rel, bytes, mimeType); err != nil {
+	if err := s.store.SetEpisodeFile(ctx, e.ID, rel, bytes, mimeType, s.personEvent(ctx, p.UserID, func() (string, string, map[string]any) {
+		return "podcasts.downloaded", e.Title, map[string]any{"podcast_id": p.ID, "podcast": p.Title, "episode_id": e.ID, "title": e.Title, "bytes": bytes}
+	})); err != nil {
 		s.log.Error("record download", "err", err)
 		return
 	}
 	s.store.AddActivity(ctx, p.UserID, "download", fmt.Sprintf("Downloaded “%s” (%s) — %.1f MB", e.Title, p.Title, float64(bytes)/1048576), p.ID, e.ID)
-	s.publish(p.UserID, "podcasts.downloaded", e.Title, map[string]any{"podcast_id": p.ID, "podcast": p.Title, "episode_id": e.ID, "title": e.Title, "bytes": bytes})
+
 	s.log.Info("downloaded", "podcast", p.Title, "episode", e.Title, "mb", bytes>>20)
 }
 

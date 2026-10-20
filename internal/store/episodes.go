@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"strings"
 	"time"
 )
@@ -221,15 +222,20 @@ func (s *Store) EpisodeExtras(ctx context.Context, id int64) (chapters, sponsors
 
 // UpsertEpisode inserts an episode or refreshes its feed metadata, keeping
 // the file and download state. It reports whether the row is new.
-func (s *Store) UpsertEpisode(ctx context.Context, e *Episode) (bool, error) {
+func (s *Store) UpsertEpisode(ctx context.Context, e *Episode, after ...core.CommitHook) (bool, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
 	var id int64
-	err := s.DB.QueryRowContext(ctx, `SELECT id FROM episodes WHERE podcast_id = ? AND guid = ?`, e.PodcastID, e.GUID).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT id FROM episodes WHERE podcast_id = ? AND guid = ?`, e.PodcastID, e.GUID).Scan(&id)
 	if err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
 	if id > 0 {
 		e.ID = id
-		_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET title = ?, description = CASE WHEN ? = '' THEN description ELSE ? END, link = ?,
+		_, err := tx.ExecContext(ctx, `UPDATE episodes SET title = ?, description = CASE WHEN ? = '' THEN description ELSE ? END, link = ?,
 			enclosure_url = CASE WHEN ? = '' THEN enclosure_url ELSE ? END, enclosure_type = CASE WHEN ? = '' THEN enclosure_type ELSE ? END,
 			enclosure_bytes = CASE WHEN ? = 0 THEN enclosure_bytes ELSE ? END,
 			duration = CASE WHEN ? = 0 THEN duration ELSE ? END, pub_date = CASE WHEN ? = '' THEN pub_date ELSE ? END,
@@ -238,7 +244,10 @@ func (s *Store) UpsertEpisode(ctx context.Context, e *Episode) (bool, error) {
 			e.Title, e.Description, e.Description, e.Link, e.EnclosureURL, e.EnclosureURL, e.EnclosureType, e.EnclosureType, e.EnclosureBytes, e.EnclosureBytes,
 			e.Duration, e.Duration, e.PubDate, e.PubDate, e.ArtworkURL, e.ArtworkURL, e.Season, e.EpisodeNo, e.EpisodeType, boolInt(e.Explicit), boolInt(e.IsVideo),
 			e.ChaptersURL, e.TranscriptURL, e.Position, e.Position, id)
-		return false, err
+		if err != nil {
+			return false, err
+		}
+		return false, tx.Commit()
 	}
 	if e.Download == "" {
 		e.Download = DownloadNone
@@ -246,7 +255,7 @@ func (s *Store) UpsertEpisode(ctx context.Context, e *Episode) (bool, error) {
 	if e.Position < 0 {
 		e.Position = 0
 	}
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO episodes (podcast_id, guid, title, description, link, enclosure_url, enclosure_type, enclosure_bytes,
+	res, err := tx.ExecContext(ctx, `INSERT INTO episodes (podcast_id, guid, title, description, link, enclosure_url, enclosure_type, enclosure_bytes,
 		duration, pub_date, artwork_url, season, episode_no, episode_type, explicit, is_video, chapters_url, transcript_url, chapters, sponsors, youtube_id, position, download)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.PodcastID, e.GUID, e.Title, e.Description, e.Link, e.EnclosureURL, e.EnclosureType, e.EnclosureBytes,
@@ -256,7 +265,7 @@ func (s *Store) UpsertEpisode(ctx context.Context, e *Episode) (bool, error) {
 		return false, conflict(err)
 	}
 	e.ID, _ = res.LastInsertId()
-	return true, nil
+	return true, core.Commit(tx, after...)
 }
 
 // SetEpisodeMeta stores what a download learned (YouTube: real date, duration, description).
@@ -288,9 +297,17 @@ func (s *Store) SetDownloadState(ctx context.Context, id int64, state, errMsg st
 }
 
 // SetEpisodeFile records a finished download.
-func (s *Store) SetEpisodeFile(ctx context.Context, id int64, path string, bytes int64, mime string) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET file_path = ?, file_bytes = ?, file_type = ?, downloaded_at = ?, download = 'done', download_error = '', download_tries = 0 WHERE id = ?`, path, bytes, mime, Now(), id)
-	return err
+func (s *Store) SetEpisodeFile(ctx context.Context, id int64, path string, bytes int64, mime string, after ...core.CommitHook) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `UPDATE episodes SET file_path = ?, file_bytes = ?, file_type = ?, downloaded_at = ?, download = 'done', download_error = '', download_tries = 0 WHERE id = ?`, path, bytes, mime, Now(), id)
+	if err != nil {
+		return err
+	}
+	return core.Commit(tx, after...)
 }
 
 // ClearEpisodeFile forgets a file (deleted by hand or culled).

@@ -306,17 +306,13 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 	if in.Completed == nil && e.Duration > 0 && st.CompleteAt > 0 && in.Position*100 >= e.Duration*st.CompleteAt {
 		completed = true
 	}
-	wasPlayed, wasDone := e.LastPlayedAt != "", e.Completed
-	if err := s.store.SaveProgress(ctx, me(r), e.ID, in.Position, in.Listened, completed); err != nil {
+	wasDone := e.Completed
+	if err := s.store.SaveProgress(ctx, me(r), e.ID, in.Position, in.Listened, completed, s.progressEvent(ctx, me(r), e, false)); err != nil {
 		s.fail(w, err, "save progress")
 		return
 	}
 	s.trackPlayback(r, me(r), e, in.Position, in.Listened, completed, strings.TrimSpace(in.Client))
-	if !wasPlayed && in.Listened > 0 {
-		s.publish(me(r), "podcasts.played", e.Title, map[string]any{"podcast_id": e.PodcastID, "podcast": e.PodcastTitle, "episode_id": e.ID, "title": e.Title, "duration": e.Duration})
-	}
 	if completed && !wasDone {
-		s.publish(me(r), "podcasts.finished", e.Title, map[string]any{"podcast_id": e.PodcastID, "podcast": e.PodcastTitle, "episode_id": e.ID, "title": e.Title, "duration": e.Duration})
 		if completed && !st.KeepPlayed && e.FilePath != "" {
 			// a played episode's file goes when retention is not asked to keep it
 			if p, err := s.store.GetPodcastAny(ctx, e.PodcastID); err == nil && p.RetentionDays == 0 && p.Kind == store.KindRSS && !e.Saved {
@@ -335,12 +331,9 @@ func (s *Server) handleMarkPlayed(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "get episode")
 		return
 	}
-	if err := s.store.SetCompleted(r.Context(), me(r), e.ID, true); err != nil {
+	if err := s.store.SetCompleted(r.Context(), me(r), e.ID, true, s.progressEvent(r.Context(), me(r), e, true)); err != nil {
 		s.fail(w, err, "mark played")
 		return
-	}
-	if !e.Completed {
-		s.publish(me(r), "podcasts.finished", e.Title, map[string]any{"podcast_id": e.PodcastID, "podcast": e.PodcastTitle, "episode_id": e.ID, "title": e.Title, "duration": e.Duration, "manual": true})
 	}
 	_ = s.store.RemoveFromQueue(r.Context(), me(r), e.ID)
 	writeJSON(w, http.StatusOK, map[string]bool{"completed": true})

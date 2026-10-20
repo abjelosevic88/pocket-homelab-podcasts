@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"strings"
 )
 
@@ -39,14 +40,19 @@ func scanPodcast(row interface{ Scan(...any) error }, derived bool) (*Podcast, e
 }
 
 // CreatePodcast inserts a subscription.
-func (s *Store) CreatePodcast(ctx context.Context, p *Podcast) error {
+func (s *Store) CreatePodcast(ctx context.Context, p *Podcast, after ...core.CommitHook) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	if p.Kind == "" {
 		p.Kind = KindRSS
 	}
 	if p.PubDateMode == "" {
 		p.PubDateMode = "published"
 	}
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO podcasts (user_id, kind, title, feed_url, site_url, youtube_id, youtube_kind, author, description,
+	res, err := tx.ExecContext(ctx, `INSERT INTO podcasts (user_id, kind, title, feed_url, site_url, youtube_id, youtube_kind, author, description,
 		artwork_url, artwork_file, language, categories, explicit, favorite, playback_speed, start_skip, end_skip, auto_play_next, notify,
 		auto_download, download_limit, retention_days, min_duration, title_filter, feed_cutoff_days, pub_date_mode, sponsorblock, refresh_minutes)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -57,7 +63,7 @@ func (s *Store) CreatePodcast(ctx context.Context, p *Podcast) error {
 		return conflict(err)
 	}
 	p.ID, _ = res.LastInsertId()
-	return nil
+	return core.Commit(tx, after...)
 }
 
 // UpdatePodcast stores every editable field.
@@ -156,19 +162,24 @@ func (s *Store) ListAllPodcasts(ctx context.Context) ([]Podcast, error) {
 
 // DeletePodcast removes a subscription with its episodes and returns the
 // files that belonged to it, for the caller to delete.
-func (s *Store) DeletePodcast(ctx context.Context, userID, id int64) ([]string, error) {
+func (s *Store) DeletePodcast(ctx context.Context, userID, id int64, after ...core.CommitHook) ([]string, error) {
 	files, err := s.PodcastFiles(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.DB.ExecContext(ctx, `DELETE FROM podcasts WHERE id = ? AND user_id = ?`, id, userID)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM podcasts WHERE id = ? AND user_id = ?`, id, userID)
 	if err != nil {
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil, ErrNotFound
 	}
-	return files, nil
+	return files, core.Commit(tx, after...)
 }
 
 // PodcastFiles lists the media files of a subscription (relative to MEDIA_DIR).
