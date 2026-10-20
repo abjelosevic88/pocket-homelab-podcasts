@@ -69,6 +69,9 @@ func (s *Server) handleAddVideo(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "add video")
 		return
 	}
+	if info.ChannelID != "" {
+		_ = s.store.SetEpisodeSource(ctx, e.ID, "https://www.youtube.com/channel/"+info.ChannelID+"/videos", info.Channel)
+	}
 	_ = s.store.QueueDownload(ctx, e.ID)
 	s.kickDownloads()
 	s.store.AddActivity(ctx, me(r), "pick", "Picked video “"+e.Title+"”", p.ID, e.ID)
@@ -130,6 +133,7 @@ func (s *Server) handlePickEpisode(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "pick")
 		return
 	}
+	_ = s.store.SetEpisodeSource(ctx, e.ID, u, res.Feed.Title)
 	if in.Download == nil || *in.Download {
 		_ = s.store.QueueDownload(ctx, e.ID)
 		s.kickDownloads()

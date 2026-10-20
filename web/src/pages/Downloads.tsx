@@ -16,13 +16,13 @@ export default function Downloads() {
   if (!data) return null
   return (
     <>
-      <PageHeader title="Downloads" sub={`${data.done.length} file${data.done.length === 1 ? '' : 's'} on disk · ${bytes(data.bytes)}${data.yt_dlp ? ` · yt-dlp ${data.yt_dlp}` : ' · yt-dlp not available'}`} />
+      <PageHeader title="Downloads" sub={`${data.done.length} file${data.done.length === 1 ? '' : 's'} on your server · ${bytes(data.bytes)}${data.yt_dlp ? ` · yt-dlp ${data.yt_dlp}` : ' · yt-dlp not available'}`} />
       {data.pending.length > 0 && (
         <Card title={`In progress (${data.pending.length})`} className="mb">
           <EpisodeList episodes={data.pending} onChange={eps => setData({ ...data, pending: eps })} compact />
         </Card>
       )}
-      <h2 className="mb-sm">On disk</h2>
+      <h2 className="mb-sm">On your server</h2>
       <EpisodeList episodes={data.done} onChange={eps => setData({ ...data, done: eps.filter(e => e.download === 'done') })} compact empty={<Empty title="Nothing downloaded">Episodes you download, auto-downloads and YouTube videos show up here.</Empty>} />
     </>
   )

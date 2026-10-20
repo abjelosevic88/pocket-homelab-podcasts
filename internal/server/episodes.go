@@ -80,6 +80,15 @@ type episodeDetail struct {
 	*store.Episode
 	Chapters []store.Chapter `json:"chapters"`
 	Sponsors []store.Segment `json:"sponsors"`
+	Source   *episodeSource  `json:"source,omitempty"`
+}
+
+// episodeSource is the show a picked episode came from.
+type episodeSource struct {
+	FeedURL      string `json:"feed_url"`
+	Title        string `json:"title"`
+	Kind         string `json:"kind"` // rss | youtube
+	SubscribedID int64  `json:"subscribed_id,omitempty"`
 }
 
 func (s *Server) episodeDetail(r *http.Request, e *store.Episode) episodeDetail {
@@ -91,6 +100,20 @@ func (s *Server) episodeDetail(r *http.Request, e *store.Episode) episodeDetail 
 	}
 	if sb != "" {
 		_ = json.Unmarshal([]byte(sb), &d.Sponsors)
+	}
+	if feed, title := s.store.EpisodeSource(r.Context(), e.ID); feed != "" {
+		src := &episodeSource{FeedURL: feed, Title: title, Kind: store.KindRSS}
+		ytID := ""
+		if strings.Contains(feed, "youtube.com") {
+			src.Kind = store.KindYouTube
+			if i := strings.Index(feed, "/channel/"); i >= 0 {
+				ytID = strings.SplitN(feed[i+9:], "/", 2)[0]
+			}
+		}
+		if p, err := s.store.FindPodcastBySource(r.Context(), me(r), feed, ytID); err == nil {
+			src.SubscribedID = p.ID
+		}
+		d.Source = src
 	}
 	return d
 }

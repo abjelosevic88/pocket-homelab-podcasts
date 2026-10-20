@@ -189,6 +189,30 @@ func (s *Store) GetEpisodeAny(ctx context.Context, id int64) (*Episode, error) {
 	return scanEpisode(s.DB.QueryRowContext(ctx, `SELECT `+episodeCols+episodeFrom+` WHERE e.id = ?`, id))
 }
 
+// SetEpisodeSource records the show a picked episode came from.
+func (s *Store) SetEpisodeSource(ctx context.Context, id int64, feed, title string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET source_feed = ?, source_title = ? WHERE id = ?`, feed, title, id)
+	return err
+}
+
+// EpisodeSource returns the show a picked episode came from (” when none).
+func (s *Store) EpisodeSource(ctx context.Context, id int64) (feed, title string) {
+	_ = s.DB.QueryRowContext(ctx, `SELECT source_feed, source_title FROM episodes WHERE id = ?`, id).Scan(&feed, &title)
+	return
+}
+
+// FindPodcastBySource finds a person's subscription to a feed, or to a
+// YouTube channel by its UC… id (a channel followed by @handle has another URL).
+func (s *Store) FindPodcastBySource(ctx context.Context, userID int64, feed, youtubeID string) (*Podcast, error) {
+	if p, err := s.FindPodcastByFeed(ctx, userID, feed); err == nil {
+		return p, nil
+	}
+	if youtubeID == "" {
+		return nil, ErrNotFound
+	}
+	return scanPodcast(s.DB.QueryRowContext(ctx, `SELECT `+podcastCols+podcastDerived+` FROM podcasts p WHERE p.user_id = ? AND p.youtube_id = ?`, userID, youtubeID), true)
+}
+
 // EpisodeExtras loads the chapter and SponsorBlock JSON of an episode.
 func (s *Store) EpisodeExtras(ctx context.Context, id int64) (chapters, sponsors string, err error) {
 	err = notFound(s.DB.QueryRowContext(ctx, `SELECT chapters, sponsors FROM episodes WHERE id = ?`, id).Scan(&chapters, &sponsors))

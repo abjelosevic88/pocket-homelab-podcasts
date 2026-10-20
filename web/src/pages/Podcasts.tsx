@@ -36,7 +36,7 @@ export default function Podcasts() {
               <Artwork src={p.artwork} title={p.title} size="sm" />
               <div className="info">
                 <div className="nm">{p.favorite && <span className="fav-inline">★</span>}{p.title}{p.kind === 'youtube' && <span className="badge" style={{ marginLeft: 6 }}>YouTube</span>}</div>
-                <div className="meta"><span>{p.author}</span>{p.latest_pub_date && <span>latest {ago(p.latest_pub_date)}</span>}{p.downloaded_count > 0 && <span>{p.downloaded_count} on disk · {bytes(p.downloaded_bytes)}</span>}{p.last_error && <span className="bad">⚠ {p.last_error}</span>}</div>
+                <div className="meta"><span>{p.author}</span>{p.latest_pub_date && <span>latest {ago(p.latest_pub_date)}</span>}{p.downloaded_count > 0 && <span>{p.downloaded_count} on server · {bytes(p.downloaded_bytes)}</span>}{p.last_error && <span className="bad">⚠ {p.last_error}</span>}</div>
               </div>
               <div className="side">{p.unplayed_count > 0 ? <span className="count-pill inline">{p.unplayed_count} new</span> : <span className="muted small">{p.episode_count} episodes</span>}</div>
             </Link>

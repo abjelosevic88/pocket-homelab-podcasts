@@ -90,7 +90,7 @@ export function plain(html: string, max = 200): string {
   return t.length > max ? t.slice(0, max - 1) + '…' : t
 }
 
-export const DL_LABEL: Record<string, string> = { none: '', queued: 'Queued', downloading: 'Downloading…', done: 'Downloaded', failed: 'Download failed', culled: 'File removed' }
+export const DL_LABEL: Record<string, string> = { none: '', queued: 'Queued', downloading: 'Downloading…', done: 'On server', failed: 'Download failed', culled: 'File removed' }
 
 export const SB_CATEGORIES: { id: string; label: string; hint: string }[] = [
   { id: 'sponsor', label: 'Sponsor', hint: 'Paid promotions and ads' },

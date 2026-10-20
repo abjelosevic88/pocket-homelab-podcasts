@@ -26,7 +26,8 @@ export interface Episode {
 
 export interface Chapter { start: number; end?: number; title: string; url?: string; img?: string }
 export interface Segment { start: number; end: number; category: string }
-export interface EpisodeDetail extends Episode { chapters: Chapter[]; sponsors: Segment[] }
+export interface EpisodeSource { feed_url: string; title: string; kind: Kind; subscribed_id?: number }
+export interface EpisodeDetail extends Episode { chapters: Chapter[]; sponsors: Segment[]; source?: EpisodeSource }
 
 export interface Playlist {
   id: number; user_id: number; name: string; description: string; icon: string; podcast_ids: number[]

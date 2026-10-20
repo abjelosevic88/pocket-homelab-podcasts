@@ -37,7 +37,7 @@ export function describe(p: Playlist): string {
   if (p.min_duration) parts.push(`over ${fmtDur(p.min_duration)}`)
   if (p.max_duration) parts.push(`under ${fmtDur(p.max_duration)}`)
   if (p.max_age_days) parts.push(`last ${p.max_age_days} days`)
-  if (p.downloaded_only) parts.push('on disk')
+  if (p.downloaded_only) parts.push('on server')
   return parts.join(' · ') || 'everything'
 }
 
@@ -65,7 +65,7 @@ export function PlaylistEditor({ pl, onClose, onSaved }: { pl: Partial<Playlist>
               <label className="row"><input type="checkbox" checked={f.include_unplayed} onChange={e => set('include_unplayed', e.target.checked)} style={{ width: 'auto' }} /> Unplayed</label>
               <label className="row"><input type="checkbox" checked={f.include_partial} onChange={e => set('include_partial', e.target.checked)} style={{ width: 'auto' }} /> In progress</label>
               <label className="row"><input type="checkbox" checked={f.include_played} onChange={e => set('include_played', e.target.checked)} style={{ width: 'auto' }} /> Played</label>
-              <label className="row"><input type="checkbox" checked={f.downloaded_only} onChange={e => set('downloaded_only', e.target.checked)} style={{ width: 'auto' }} /> Only episodes on disk</label>
+              <label className="row"><input type="checkbox" checked={f.downloaded_only} onChange={e => set('downloaded_only', e.target.checked)} style={{ width: 'auto' }} /> Only episodes downloaded to the server</label>
               <div className="two-col tight">
                 <Field label="Min length (min)"><input type="number" min={0} value={mins(f.min_duration)} onChange={e => set('min_duration', Number(e.target.value) * 60)} className="num" /></Field>
                 <Field label="Max length (min)"><input type="number" min={0} value={mins(f.max_duration)} onChange={e => set('max_duration', Number(e.target.value) * 60)} className="num" /></Field>

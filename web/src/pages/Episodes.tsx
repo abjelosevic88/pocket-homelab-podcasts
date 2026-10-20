@@ -29,7 +29,7 @@ export default function Episodes() {
         <Segmented size="sm" value={status} onChange={v => set('status', v)} options={[{ value: '', label: 'All' }, { value: 'unplayed', label: 'Unplayed' }, { value: 'partial', label: 'In progress' }, { value: 'played', label: 'Played' }]} />
         <Segmented size="sm" value={days} onChange={v => set('days', v)} options={[{ value: '', label: 'Any time' }, { value: '7', label: 'Week' }, { value: '30', label: 'Month' }]} />
         <Segmented size="sm" value={kind} onChange={v => set('kind', v)} options={[{ value: '', label: 'All sources' }, { value: 'rss', label: 'Podcasts' }, { value: 'youtube', label: 'YouTube' }]} />
-        <Segmented size="sm" value={downloaded} onChange={v => set('downloaded', v)} options={[{ value: '', label: 'Any' }, { value: '1', label: 'On disk' }]} />
+        <Segmented size="sm" value={downloaded} onChange={v => set('downloaded', v)} options={[{ value: '', label: 'Any' }, { value: '1', label: 'On server' }]} />
       </div>
       {loading && !data ? <Loading /> : (
         <>
