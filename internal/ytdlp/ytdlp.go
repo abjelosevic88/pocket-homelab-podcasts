@@ -161,14 +161,15 @@ func Classify(raw string) (kind, normalized, id string, err error) {
 
 // Entry is one video in a listing.
 type Entry struct {
-	ID         string
-	Title      string
-	URL        string
-	Duration   int
-	UploadDate string // YYYYMMDD when known
-	Timestamp  int64
-	Thumbnail  string
-	Live       bool
+	ID          string
+	Title       string
+	URL         string
+	Duration    int
+	UploadDate  string // YYYYMMDD when known
+	Timestamp   int64
+	Thumbnail   string
+	Live        bool
+	MembersOnly bool // only the channel's paying members can get it
 }
 
 // Listing is a channel or playlist with its newest entries.
@@ -194,14 +195,15 @@ type rawListing struct {
 	WebpageURL  string     `json:"webpage_url"`
 	Thumbnails  []rawThumb `json:"thumbnails"`
 	Entries     []struct {
-		ID         string     `json:"id"`
-		Title      string     `json:"title"`
-		URL        string     `json:"url"`
-		Duration   float64    `json:"duration"`
-		UploadDate string     `json:"upload_date"`
-		Timestamp  int64      `json:"timestamp"`
-		Thumbnails []rawThumb `json:"thumbnails"`
-		LiveStatus string     `json:"live_status"`
+		ID           string     `json:"id"`
+		Title        string     `json:"title"`
+		URL          string     `json:"url"`
+		Duration     float64    `json:"duration"`
+		UploadDate   string     `json:"upload_date"`
+		Timestamp    int64      `json:"timestamp"`
+		Thumbnails   []rawThumb `json:"thumbnails"`
+		LiveStatus   string     `json:"live_status"`
+		Availability string     `json:"availability"`
 	} `json:"entries"`
 }
 
@@ -260,7 +262,8 @@ func (r *Runner) Index(ctx context.Context, u string, limit int) (*Listing, erro
 			continue
 		}
 		en := Entry{ID: e.ID, Title: e.Title, URL: firstNonEmpty(e.URL, "https://www.youtube.com/watch?v="+e.ID), Duration: int(e.Duration), UploadDate: e.UploadDate, Timestamp: e.Timestamp,
-			Thumbnail: bestThumb(e.Thumbnails, ""), Live: e.LiveStatus == "is_live" || e.LiveStatus == "is_upcoming"}
+			Thumbnail: bestThumb(e.Thumbnails, ""), Live: e.LiveStatus == "is_live" || e.LiveStatus == "is_upcoming",
+			MembersOnly: e.Availability == "subscriber_only" || e.Availability == "premium_only" || e.Availability == "needs_auth"}
 		if en.Thumbnail == "" {
 			en.Thumbnail = "https://i.ytimg.com/vi/" + e.ID + "/hqdefault.jpg"
 		}
@@ -528,3 +531,20 @@ func firstNonEmpty(v ...string) string {
 	}
 	return ""
 }
+
+// RSSURL is YouTube's own feed for a source: for a channel its "full-length
+// uploads" list (UULF…: no Shorts, no members-only videos), for a playlist
+// the playlist. "" when the id is neither.
+func RSSURL(kind, id string) string {
+	switch {
+	case kind == KindChannel && strings.HasPrefix(id, "UC") && len(id) > 2:
+		return "https://www.youtube.com/feeds/videos.xml?playlist_id=UULF" + id[2:]
+	case kind == KindPlaylist && id != "":
+		return "https://www.youtube.com/feeds/videos.xml?playlist_id=" + id
+	}
+	return ""
+}
+
+// HasCookies reports whether a cookies file is configured: with a member's
+// cookies members-only videos can be downloaded.
+func (r *Runner) HasCookies() bool { return r.Cookies != "" && exists(r.Cookies) }

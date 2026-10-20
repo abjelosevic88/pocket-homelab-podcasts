@@ -41,7 +41,7 @@ func (s *Server) publicSettings(r *http.Request, st store.Settings) map[string]a
 		"notify_kind":      st.NotifyKind, "notify_url": st.NotifyURL, "notify_token_set": st.NotifyToken != "",
 		"notify_env": s.cfg.NotifyURL != "" && s.isOwner(ctx, uid),
 		"feed_key":   st.FeedKey, "feed_base_url": st.FeedBaseURL, "feed_url": s.feedBase(r, uid) + "/feed/" + st.FeedKey + "/",
-		"yt_dlp": ytv, "yt_dlp_updatable": s.yt.SiteDir != "",
+		"yt_dlp": ytv, "yt_dlp_updatable": s.yt.SiteDir != "", "youtube_check_minutes": s.cfg.YouTubeCheckMinutes, "ytdlp_cookies": s.yt.HasCookies(),
 	}
 }
 
@@ -223,7 +223,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 		"auth_mode": s.cfg.AuthMode, "data_dir": s.cfg.DataDir, "db_path": s.cfg.DBPath, "db_bytes": size,
 		"media_dir": s.cfg.MediaDir, "media_files": mediaFiles, "media_bytes": mediaBytes,
 		"uptime": time.Since(s.started).Round(time.Second).String(), "timezone": time.Now().Location().String(),
-		"counts": counts, "yt_dlp": ytv, "refresh_minutes": s.cfg.RefreshMinutes, "download_workers": s.cfg.DownloadWorkers,
+		"counts": counts, "yt_dlp": ytv, "youtube_check": s.quickCheckStatus(), "ytdlp_cookies": s.yt.HasCookies(), "refresh_minutes": s.cfg.RefreshMinutes, "download_workers": s.cfg.DownloadWorkers,
 	})
 }
 

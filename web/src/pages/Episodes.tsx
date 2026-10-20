@@ -12,12 +12,13 @@ export default function Episodes() {
   const kind = sp.get('kind') || ''
   const days = sp.get('days') || ''
   const downloaded = sp.get('downloaded') || ''
+  const sort = sp.get('sort') || ''
   const [q, setQ] = useState(sp.get('q') || '')
   const dq = useDebounce(q)
   const [page, setPage] = useState(0)
   const LIMIT = 50
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }); setPage(0) }
-  const url = `${V1}/episodes?status=${status}&kind=${kind}&days=${days}&downloaded=${downloaded}&q=${encodeURIComponent(dq)}&limit=${LIMIT}&offset=${page * LIMIT}`
+  const url = `${V1}/episodes?status=${status}&kind=${kind}&days=${days}&downloaded=${downloaded}&sort=${sort}&q=${encodeURIComponent(dq)}&limit=${LIMIT}&offset=${page * LIMIT}`
   const { data, setData, loading } = useAsync(() => api.get<{ episodes: Episode[]; total: number }>(url), [url])
   useEffect(() => { setPage(0) }, [dq])
   const setEps = useCallback((eps: Episode[]) => setData(d => d ? { ...d, episodes: eps } : d), [setData])
@@ -26,6 +27,7 @@ export default function Episodes() {
       <PageHeader title="Episodes" sub={data ? `${data.total} episode${data.total === 1 ? '' : 's'}` : undefined} />
       <div className="toolbar">
         <label className="search"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search titles and notes…" /></label>
+        <Segmented size="sm" value={sort} onChange={v => set('sort', v)} options={[{ value: '', label: 'Newest' }, { value: 'oldest', label: 'Oldest' }, { value: 'longest', label: 'Longest' }, { value: 'shortest', label: 'Shortest' }]} />
         <Segmented size="sm" value={status} onChange={v => set('status', v)} options={[{ value: '', label: 'All' }, { value: 'unplayed', label: 'Unplayed' }, { value: 'partial', label: 'In progress' }, { value: 'played', label: 'Played' }]} />
         <Segmented size="sm" value={days} onChange={v => set('days', v)} options={[{ value: '', label: 'Any time' }, { value: '7', label: 'Week' }, { value: '30', label: 'Month' }]} />
         <Segmented size="sm" value={kind} onChange={v => set('kind', v)} options={[{ value: '', label: 'All sources' }, { value: 'rss', label: 'Podcasts' }, { value: 'youtube', label: 'YouTube' }]} />

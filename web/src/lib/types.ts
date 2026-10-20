@@ -44,7 +44,7 @@ export interface Settings {
   refresh_minutes: number; refresh_default: number; auto_download_default: boolean; retention_days: number; youtube_limit: number; youtube_min_duration: number; keep_played: boolean
   search_source: 'all' | 'itunes' | 'podcastindex'; podcastindex_key: string; podcastindex_secret_set: boolean; podcastindex_env: boolean
   notify_kind: 'apprise' | 'ntfy' | 'webhook'; notify_url: string; notify_token_set: boolean; notify_env: boolean
-  feed_key: string; feed_base_url: string; feed_url: string; yt_dlp: string; yt_dlp_updatable: boolean
+  feed_key: string; feed_base_url: string; feed_url: string; yt_dlp: string; yt_dlp_updatable: boolean; youtube_check_minutes: number; ytdlp_cookies: boolean
 }
 
 export interface Dashboard {

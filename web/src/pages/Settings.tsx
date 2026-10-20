@@ -120,6 +120,8 @@ function Downloads() {
       <Card title="YouTube">
         <div className="grid" style={{ gap: 14 }}>
           <p className="muted">Channels and playlists are read and downloaded with yt-dlp on this box. YouTube changes often; when downloads start failing, update it here — no rebuild needed.</p>
+          <p className="muted small" style={{ margin: 0 }}>{f.youtube_check_minutes > 0 ? <>New uploads are spotted within about <b>{f.youtube_check_minutes} minutes</b> through YouTube's RSS feed; a full check with yt-dlp also runs at the feed interval on the left, so nothing is missed when the RSS is down.</> : <>New uploads are found at the feed interval on the left.</>}</p>
+          <p className="muted small" style={{ margin: 0 }}>{f.ytdlp_cookies ? <>A YouTube login is configured, so <b>members-only</b> videos of channels you are a paying member of are downloaded too.</> : <><b>Members-only</b> (“Premium”) videos are skipped: only a channel's paying members can get them. If you are a member, give the app your YouTube login cookies (<code>YTDLP_COOKIES</code>) and they download too.</>}</p>
           <table className="table compact"><tbody>
             <tr><th>yt-dlp</th><td className="mono">{f.yt_dlp || <span className="bad">not available</span>}</td><td className="right">{user?.role === 'admin' && f.yt_dlp_updatable && <button className="btn sm" onClick={updateYt} disabled={updating}>{updating ? 'Updating…' : 'Update now'}</button>}</td></tr>
           </tbody></table>
@@ -366,6 +368,7 @@ function About() {
             <tr><th>Version</th><td className="mono">{String(data.version)}</td></tr>
             <tr><th>Runtime</th><td className="mono">{String(data.go)} · {String(data.os)}/{String(data.arch)}</td></tr>
             <tr><th>yt-dlp</th><td className="mono">{data.yt_dlp ? String(data.yt_dlp) : <span className="bad">not available</span>}</td></tr>
+            {(() => { const yc = data.youtube_check as { every_minutes: number; ok: number; failing: number; last_ok: string } | undefined; return yc && yc.every_minutes > 0 ? <tr><th>New uploads</th><td className="mono">RSS check every {yc.every_minutes} min · {yc.ok} channel{yc.ok === 1 ? '' : 's'} OK{yc.failing > 0 && ` · ${yc.failing} failing (covered by the full check)`}{yc.last_ok && ` · last ${ago(yc.last_ok)}`}</td></tr> : null })()}
             <tr><th>Auth mode</th><td className="mono">{String(data.auth_mode)}</td></tr>
             <tr><th>Database</th><td className="mono">{String(data.db_path)} · {bytes(Number(data.db_bytes))}</td></tr>
             <tr><th>Media</th><td className="mono">{String(data.media_dir)} · {String(data.media_files)} files · {bytes(Number(data.media_bytes))}</td></tr>

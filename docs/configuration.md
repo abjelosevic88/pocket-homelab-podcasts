@@ -32,6 +32,7 @@ Everything is an environment variable; every one has a default that works with a
 | `YTDLP_EXTRA_ARGS` | – | Extra arguments for every call (e.g. `--js-runtimes node`, `--proxy …`) |
 | `YTDLP_COOKIES` | – | `cookies.txt` for age-restricted or members-only content |
 | `YOUTUBE_INDEX_LIMIT` | `30` | How many of a channel's newest videos are indexed per refresh |
+| `YOUTUBE_CHECK_MINUTES` | `10` | Quick check for new uploads through YouTube's RSS feed (0 = off); yt-dlp only runs when it shows a new video |
 
 The image has `yt-dlp` (from PyPI, with its JavaScript-challenge helper), `deno` and `ffmpeg`. For the bare binary install them yourself; YouTube needs a JavaScript runtime (`deno` is what yt-dlp enables by default; `node` works with `YTDLP_EXTRA_ARGS=--js-runtimes node`). **Settings → Feeds & downloads → Update now** installs the newest yt-dlp into `$DATA_DIR/ytdlp` with pip, no rebuild.
 

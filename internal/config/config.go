@@ -37,10 +37,11 @@ type Config struct {
 	PodcastIndexSecret string
 
 	// YouTube
-	YtDlpPath         string // yt-dlp executable (default: "yt-dlp" on PATH, else python3 -m yt_dlp)
-	YtDlpExtra        string // extra arguments appended to every yt-dlp call (space separated)
-	YtDlpCookies      string // path of a cookies.txt file (optional)
-	YouTubeIndexLimit int    // how many of a channel's newest videos to index per refresh
+	YtDlpPath           string // yt-dlp executable (default: "yt-dlp" on PATH, else python3 -m yt_dlp)
+	YtDlpExtra          string // extra arguments appended to every yt-dlp call (space separated)
+	YtDlpCookies        string // path of a cookies.txt file (optional)
+	YouTubeIndexLimit   int    // how many of a channel's newest videos to index per refresh
+	YouTubeCheckMinutes int    // quick RSS check for new uploads (0 = off)
 
 	AuthMode             string // local | proxy | none
 	AuthProxyHeader      string
@@ -131,10 +132,11 @@ func Load() (*Config, error) {
 		PodcastIndexKey:    env("PODCASTINDEX_KEY", ""),
 		PodcastIndexSecret: env("PODCASTINDEX_SECRET", ""),
 
-		YtDlpPath:         env("YTDLP_PATH", ""),
-		YtDlpExtra:        env("YTDLP_EXTRA_ARGS", ""),
-		YtDlpCookies:      env("YTDLP_COOKIES", ""),
-		YouTubeIndexLimit: envInt("YOUTUBE_INDEX_LIMIT", 30),
+		YtDlpPath:           env("YTDLP_PATH", ""),
+		YtDlpExtra:          env("YTDLP_EXTRA_ARGS", ""),
+		YtDlpCookies:        env("YTDLP_COOKIES", ""),
+		YouTubeIndexLimit:   envInt("YOUTUBE_INDEX_LIMIT", 30),
+		YouTubeCheckMinutes: envInt("YOUTUBE_CHECK_MINUTES", 10),
 
 		AuthMode:             strings.ToLower(env("AUTH_MODE", "local")),
 		AuthProxyHeader:      env("AUTH_PROXY_HEADER", "Remote-User"),

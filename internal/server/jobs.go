@@ -230,7 +230,16 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 	if firstIndex {
 		toQueue = p.DownloadLimit
 	}
+	removed := 0
+	members := s.yt.HasCookies() // a paying member's cookies make members-only videos downloadable
 	for i, en := range l.Entries {
+		if en.MembersOnly && !members {
+			// only the channel's paying members can get these; drop any listed before
+			if id, ok := known[en.ID]; ok && s.store.RetireMembersOnly(ctx, p.ID, id) {
+				removed++
+			}
+			continue
+		}
 		if en.Live {
 			continue
 		}
@@ -271,6 +280,9 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 			_ = s.store.QueueDownload(ctx, e.ID)
 			toQueue--
 		}
+	}
+	if removed > 0 {
+		s.store.AddActivity(ctx, p.UserID, "refresh", fmt.Sprintf("%s: removed %d members-only video%s (only paying channel members can get them)", p.Title, removed, plural(removed)), p.ID, 0)
 	}
 	if len(created) > 0 {
 		s.kickDownloads()
@@ -476,7 +488,7 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 // private, removed videos, a gone enclosure) so they are not retried.
 func permanentFailure(err error) bool {
 	m := strings.ToLower(err.Error())
-	for _, k := range []string{"members-only", "members only", "private video", "video unavailable", "has been removed", "no longer available", "http 404", "http 410", "http 403", "sign in to confirm your age", "age-restricted"} {
+	for _, k := range []string{"members-only", "members only", "channel's members", "private video", "video unavailable", "has been removed", "no longer available", "http 404", "http 410", "http 403", "sign in to confirm your age", "age-restricted"} {
 		if strings.Contains(m, k) {
 			return true
 		}

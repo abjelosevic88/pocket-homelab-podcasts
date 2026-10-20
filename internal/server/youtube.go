@@ -63,6 +63,10 @@ func (s *Server) handleAddVideo(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := s.yt.VideoInfo(ctx, norm)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "channel's members") {
+			writeErr(w, http.StatusBadRequest, "this is a members-only video: only the channel's paying members can get it (see docs/youtube.md for using your member login)")
+			return
+		}
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}

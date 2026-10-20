@@ -406,6 +406,43 @@ func (s *Store) LatestEpisodeDate(ctx context.Context, podcastID int64) string {
 	return d
 }
 
+// RetireMembersOnly removes a members-only video nobody can download. Play
+// history on it (the PinePods import matched by title, and members-only
+// twins share the public video's title) moves to the public twin first.
+// Downloaded, saved and queued episodes are left alone.
+func (s *Store) RetireMembersOnly(ctx context.Context, podcastID, id int64) bool {
+	var busy int
+	_ = s.DB.QueryRowContext(ctx, `SELECT (download IN ('done', 'downloading')) + (SELECT COUNT(1) FROM saved WHERE episode_id = ?) + (SELECT COUNT(1) FROM queue WHERE episode_id = ?) FROM episodes WHERE id = ?`, id, id, id).Scan(&busy)
+	if busy > 0 {
+		return false
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false
+	}
+	defer tx.Rollback() //nolint:errcheck
+	var twin int64
+	_ = tx.QueryRowContext(ctx, `SELECT t.id FROM episodes t JOIN episodes e ON e.id = ? WHERE t.podcast_id = ? AND t.id <> e.id AND t.title = e.title ORDER BY t.id LIMIT 1`, id, podcastID).Scan(&twin)
+	var history int
+	_ = tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM progress WHERE episode_id = ?`, id).Scan(&history)
+	if twin == 0 && history > 0 {
+		return false // nowhere to move what was listened to: keep it as history
+	}
+	if twin > 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO progress (user_id, episode_id, position, completed, listened, play_count, last_played_at, completed_at)
+			SELECT user_id, ?, position, completed, listened, play_count, last_played_at, completed_at FROM progress WHERE episode_id = ?`, twin, id); err != nil {
+			return false
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO listens (user_id, episode_id, day, seconds) SELECT user_id, ?, day, seconds FROM listens WHERE episode_id = ?`, twin, id); err != nil {
+			return false
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM episodes WHERE id = ?`, id); err != nil {
+		return false
+	}
+	return tx.Commit() == nil
+}
+
 // MissingYouTubeMeta lists downloaded YouTube episodes without show notes
 // (a refresh before 0.1.3 blanked them), oldest first.
 func (s *Store) MissingYouTubeMeta(ctx context.Context, limit int) ([]Episode, error) {

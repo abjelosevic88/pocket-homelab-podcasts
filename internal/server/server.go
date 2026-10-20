@@ -49,6 +49,7 @@ type Server struct {
 	downloadKick chan struct{}
 	refreshing   sync.Map // podcast id → true while a refresh runs
 	ytVersion    atomic.Value
+	ytc          ytChecker
 	ytBusy       atomic.Bool
 
 	core    *core.Client
@@ -145,6 +146,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		go s.downloadWorker(ctx, i)
 	}
 	go s.housekeeping(ctx)
+	go s.quickCheckLoop(ctx)
 	go func() {
 		if v, err := s.yt.Version(ctx); err == nil {
 			s.ytVersion.Store(v)
