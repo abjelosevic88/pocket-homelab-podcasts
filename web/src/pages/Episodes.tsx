@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import type { Episode, Podcast } from '../lib/types'
-import { Empty, Loading, PageHeader, Segmented, useAsync, useDebounce } from '../components/ui'
+import { Empty, Loading, PageHeader, Segmented, useAsync, useDebounce, usePopover } from '../components/ui'
 import { EpisodeList } from '../components/EpisodeRow'
 import { Select } from '../components/Select'
 
@@ -22,21 +22,6 @@ const SortIcon = () => <svg width="15" height="15" viewBox="0 0 16 16" aria-hidd
 const FilterIcon = () => <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden><path d="M2.5 3.5h11L9.2 8.6v3.6l-2.4 1.3V8.6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
 const DAYS: Record<string, string> = { '7': 'Last 7 days', '30': 'Last 30 days' }
 const KINDS: Record<string, string> = { rss: 'Podcasts only', youtube: 'YouTube only' }
-
-/** Pops open under its button and closes on a click elsewhere or Escape. */
-function usePopover() {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const click = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', click)
-    document.addEventListener('keydown', key)
-    return () => { document.removeEventListener('mousedown', click); document.removeEventListener('keydown', key) }
-  }, [open])
-  return { open, setOpen, ref }
-}
 
 /** Every episode across subscriptions with search, status tabs, sort and a filter panel. */
 export default function Episodes() {

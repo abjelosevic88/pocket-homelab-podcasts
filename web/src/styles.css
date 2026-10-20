@@ -611,3 +611,25 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
   .yt-thumb, .yt-videos.compact .yt-thumb { width: 128px; }
   .yt-video > .row { width: 100%; justify-content: flex-end; }
 }
+
+/* ---- YouTube search: mixed results ---- */
+.yts-kind { padding: 10px 14px; border-radius: 10px; white-space: nowrap; }
+.yts-kind.on { border-color: var(--accent); color: var(--accent-hover); background: var(--accent-soft); }
+.yts-top .menu { right: 0; left: auto; min-width: 180px; }
+.yt-kind-row { display: flex; }
+.yt-badge { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; }
+.yt-badge.video { background: #fee2e2; color: #b91c1c; }
+.yt-badge.channel { background: #dbeafe; color: #1d4ed8; }
+.yt-badge.playlist { background: #ede9fe; color: #6d28d9; }
+[data-theme="dark"] .yt-badge.video { background: #4c1d1d; color: #fca5a5; }
+[data-theme="dark"] .yt-badge.channel { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .yt-badge.playlist { background: #3b2a5c; color: #c4b5fd; }
+.yt-thumb.channel { aspect-ratio: auto; height: 94px; display: grid; place-items: center; background: transparent; }
+.yt-thumb.channel img { width: 94px; height: 94px; border-radius: 50%; }
+.yt-videos.compact .yt-thumb.channel { height: 68px; }
+.yt-videos.compact .yt-thumb.channel img { width: 68px; height: 68px; }
+.yt-actions { gap: 6px; flex-shrink: 0; }
+@media (max-width: 900px) {
+  .yts-top { flex-direction: row; }
+  .yt-thumb.channel { height: 72px; } .yt-thumb.channel img { width: 72px; height: 72px; }
+}
