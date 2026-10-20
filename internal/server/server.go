@@ -233,6 +233,7 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/episodes/{id}", s.handleDeleteEpisode)
 			r.Get("/episodes/{id}/stream", s.handleStream)
 			r.Head("/episodes/{id}/stream", s.handleStream)
+			r.Get("/episodes/{id}/notes", s.handleEpisodeNotes)
 			r.Get("/episodes/{id}/artwork", s.handleEpisodeArtwork)
 			r.Post("/episodes/{id}/progress", s.handleProgress)
 			r.Post("/episodes/{id}/played", s.handleMarkPlayed)
@@ -412,6 +413,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "PODCASTS",
 		Publishes: []string{"podcasts.subscribed", "podcasts.unsubscribed", "podcasts.episode_added", "podcasts.played", "podcasts.finished", "podcasts.downloaded"},
 		Offers:    linkOffers,
+		Uses:      []core.Use{notesUse},
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.cfg.BaseURL + "/api/v1/auth/oidc/callback"}}

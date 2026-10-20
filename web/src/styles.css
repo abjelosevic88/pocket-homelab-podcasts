@@ -732,3 +732,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .remote-here { white-space: nowrap; }
 @media (max-width: 900px) { .remote-here { padding: 6px 10px; } }
 @media (prefers-reduced-motion: reduce) { .remote-dot.live { animation: none; } }
+/* Notes about an episode, from Pocket Notes */
+.notes-panel h3 .spacer { flex: 1; }
+.notes-panel h3 .btn { font-size: 12px; }
+.notes-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.notes-list a { display: grid; gap: 1px; padding: 7px 8px; margin: 0 -8px; border-radius: 8px; color: var(--text); }
+.notes-list a:hover { background: var(--surface-2); text-decoration: none; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.epx-from-note { margin-top: 10px; }

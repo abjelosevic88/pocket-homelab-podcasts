@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { usePlayer, labelFor } from '../lib/player'
 import type { EpisodeDetail, Podcast } from '../lib/types'
@@ -7,10 +7,12 @@ import { Loading, useAsync, useToast } from '../components/ui'
 import { useEpisodeActions } from '../components/EpisodeRow'
 import { Artwork } from '../components/Artwork'
 import { safeHTML } from '../components/Player'
+import { NotesPanel } from '../components/NotesPanel'
 import { bytes, clock, fmtDate, fmtDur, progressPct, DL_LABEL } from '../lib/format'
 
 export default function EpisodePage() {
   const { id } = useParams()
+  const [params] = useSearchParams()
   const navigate = useNavigate()
   const { toast } = useToast()
   const player = usePlayer()
@@ -62,6 +64,9 @@ export default function EpisodePage() {
     e.season > 0 && `S${e.season}${e.episode_no ? ` · E${e.episode_no}` : ''}`,
     !e.season && e.episode_no > 0 && `Episode ${e.episode_no}`,
   ].filter(Boolean) as string[]
+  // A link from a note made at a moment of the episode (?t=seconds): offer to play from there.
+  const fromNote = Math.floor(Number(params.get('t')) || 0)
+  const playFrom = (t: number) => { if (isCur) { player.seek(t); if (!player.playing) player.play(e) } else player.play({ ...e, play_position: t, completed: false }) }
   const playLabel = playing ? 'Pause' : !canPlay ? (downloading ? 'Downloading…' : 'Download & play') : e.completed ? 'Play again' : started ? 'Resume' : 'Play'
 
   return (
@@ -90,6 +95,7 @@ export default function EpisodePage() {
                 ) : e.completed ? <span className="muted small">You finished this one</span> : !canPlay ? <span className="muted small">{downloading ? 'Fetching the audio to your server' : 'Fetches the audio first'}</span> : null}
               </div>
             </div>
+            {fromNote > 0 && canPlay && <div className="epx-from-note"><button className="btn sm primary" onClick={() => playFrom(fromNote)}>▶ Play from {clock(fromNote)}, where your note is</button></div>}
             <div className="epx-actions">
               <button className={`pill ${e.queue_pos ? 'on' : ''}`} onClick={() => run(async () => upd(await act.queue(e)))} disabled={busy}>{e.queue_pos ? '✓ Queued' : '＋ Queue'}</button>
               <button className="pill" onClick={() => run(async () => upd(await act.queue(e, true)))} disabled={busy || e.queue_pos === 1}>↱ Play next</button>
@@ -140,6 +146,7 @@ export default function EpisodePage() {
           {e.description ? <div className="md notes" dangerouslySetInnerHTML={{ __html: safeHTML(e.description) }} /> : <p className="muted">This episode has no show notes.</p>}
         </article>
         <aside className="epx-aside">
+          <NotesPanel src={`${V1}/episodes/${e.id}/notes`} at={e.completed && !isCur ? 0 : pos} />
           {e.chapters.length > 0 && (
             <div className="epx-panel">
               <h3>Chapters <span className="muted">{e.chapters.length}</span></h3>
