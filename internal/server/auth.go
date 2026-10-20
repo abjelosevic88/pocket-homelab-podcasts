@@ -86,7 +86,7 @@ func (s *Server) resolveUser(r *http.Request) (*store.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.store.GetSessionUser(ctx, c.Value)
+	return s.sessionUser(ctx, c.Value)
 }
 
 // firstOrSystemUser returns the user with that email, creating it when missing.
@@ -102,7 +102,7 @@ func (s *Server) coreUser(ctx context.Context, tok string) (*store.User, error) 
 	if !in.Active || in.User == nil || in.User.Email == "" {
 		return nil, http.ErrNoCookie
 	}
-	return s.firstOrSystemUser(ctx, strings.ToLower(in.User.Email), in.User.Name)
+	return s.coreIdentityUser(ctx, in)
 }
 
 func (s *Server) firstOrSystemUser(ctx context.Context, email, name string) (*store.User, error) {

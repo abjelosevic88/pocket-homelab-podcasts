@@ -25,6 +25,9 @@ func TestStrictlyPerUser(t *testing.T) {
 	}
 	defer st.Close()
 	s := New(cfg, st, log, nil)
+	if err := s.core.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	alice, _ := s.firstOrSystemUser(ctx, "alice@example.com", "Alice")
 	bob, _ := s.firstOrSystemUser(ctx, "bob@example.com", "Bob")
