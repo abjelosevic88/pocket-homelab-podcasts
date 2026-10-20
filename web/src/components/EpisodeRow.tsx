@@ -79,7 +79,7 @@ export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, 
           {ep.pub_date && <span>{fmtDate(ep.pub_date)}</span>}
           {ep.duration > 0 && <span>{left(ep) || fmtDur(ep.duration)}</span>}
           {ep.completed && <span className="badge ok-badge">played</span>}
-          {dl !== 'none' && dl !== 'culled' && <span className={`badge ${dl === 'failed' ? 'warn' : ''}`} title={ep.download_error || undefined}>{DL_LABEL[dl]}</span>}
+          {dl !== 'none' && dl !== 'culled' && <span className={`badge ${dl === 'failed' ? 'warn' : dl === 'done' ? 'ok-badge' : ''}`} title={ep.download_error || undefined}>{dl === 'done' ? '✓ Downloaded' : DL_LABEL[dl]}</span>}
           {ep.queue_pos > 0 && <span className="badge cat">#{ep.queue_pos} in queue</span>}
           {ep.saved && <span className="badge">saved</span>}
           {ep.has_sponsors && <span className="badge" title="SponsorBlock segments known: they are skipped while playing">SB</span>}
@@ -89,7 +89,7 @@ export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, 
       </div>
       <div className="ep-actions">
         <button className={`btn ghost sm ${ep.queue_pos ? 'on' : ''}`} onClick={async () => upd(await act.queue(ep))} title={ep.queue_pos ? 'Remove from queue' : 'Add to queue'}>{ep.queue_pos ? '✓' : '+'}</button>
-        <button className={`btn ghost sm hide-sm ${dl === 'done' ? 'on' : ''}`} onClick={async () => upd(await act.download(ep))} title={dl === 'done' ? 'Remove the downloaded file' : 'Download'}>{dlIcon}</button>
+        <button className={`btn ghost sm hide-sm dl-btn ${dl === 'done' ? 'done' : dl === 'failed' ? 'failed' : ''}`} onClick={async () => { if (dl === 'done' && !confirm('Delete the downloaded file?')) return; upd(await act.download(ep)) }} disabled={dl === 'queued' || dl === 'downloading'} title={dl === 'done' ? 'Downloaded — click to delete the file' : dl === 'failed' ? `Download failed: ${ep.download_error} — click to retry` : dl === 'queued' || dl === 'downloading' ? 'Downloading…' : 'Download'}>{dlIcon}</button>
         <div className="menu-wrap" ref={menuRef}>
           <button className="btn ghost sm" onClick={() => setMenu(m => !m)} aria-label="More">⋯</button>
           {menu && (
@@ -98,7 +98,7 @@ export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, 
               <button onClick={() => player.play(ep, { fromStart: true })}>Play from the start</button>
               <button onClick={async () => upd(await act.save(ep))}>{ep.saved ? 'Unsave' : 'Save for later'}</button>
               <button onClick={async () => upd(await act.played(ep, !ep.completed))}>{ep.completed ? 'Mark as unplayed' : 'Mark as played'}</button>
-              <button onClick={async () => upd(await act.download(ep))}>{dl === 'done' ? 'Remove download' : 'Download'}</button>
+              <button onClick={async () => { if (dl === 'done' && !confirm('Delete the downloaded file?')) return; upd(await act.download(ep)) }}>{dl === 'done' ? 'Delete download' : 'Download'}</button>
               {ep.link && <a href={ep.link} target="_blank" rel="noreferrer">Open the original ↗</a>}
               {ep.stream_url && dl === 'done' && <a href={`${ep.stream_url}?download=1`}>Save the file…</a>}
               <button className="danger-text" onClick={async () => { if (confirm('Remove this episode from the list? It comes back on the next refresh unless the feed dropped it.')) upd(await act.remove(ep)) }}>Remove episode</button>

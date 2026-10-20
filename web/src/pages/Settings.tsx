@@ -373,7 +373,7 @@ function About() {
             <tr><th>Timezone</th><td className="mono">{String(data.timezone)}</td></tr>
             <tr><th>Uptime</th><td className="mono">{String(data.uptime)}</td></tr>
             <tr><th>Pocket Core</th><td className="mono">{core.configured ? (core.registered ? `registered at ${core.url}` : `not registered: ${core.error}`) : 'not configured'}</td></tr>
-            <tr><th>Yours</th><td className="mono">{counts.podcasts} podcasts · {counts.episodes} episodes · {counts.downloaded} on server · {counts.played} played{counts.users !== undefined && <> · {counts.users} accounts on this box</>}</td></tr>
+            <tr><th>Yours</th><td className="mono">{counts.podcasts} podcasts · {counts.episodes} episodes · {counts.downloaded} downloaded · {counts.played} played{counts.users !== undefined && <> · {counts.users} accounts on this box</>}</td></tr>
           </tbody>
         </table>
       )}

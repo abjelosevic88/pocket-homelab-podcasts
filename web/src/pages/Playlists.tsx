@@ -37,7 +37,7 @@ export function describe(p: Playlist): string {
   if (p.min_duration) parts.push(`over ${fmtDur(p.min_duration)}`)
   if (p.max_duration) parts.push(`under ${fmtDur(p.max_duration)}`)
   if (p.max_age_days) parts.push(`last ${p.max_age_days} days`)
-  if (p.downloaded_only) parts.push('on server')
+  if (p.downloaded_only) parts.push('downloaded')
   return parts.join(' · ') || 'everything'
 }
 

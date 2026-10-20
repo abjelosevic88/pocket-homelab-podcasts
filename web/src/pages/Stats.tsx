@@ -23,7 +23,7 @@ export default function Stats() {
         <div className="stat"><div className="n">{s.streak}</div><div className="l">day streak</div></div>
         <div className="stat"><div className="n">{s.active_days}</div><div className="l">days with listening</div></div>
         <div className="stat"><div className="n">{s.podcasts}</div><div className="l">podcasts · {s.episodes} episodes</div></div>
-        <div className="stat"><div className="n">{s.downloaded}</div><div className="l">files on server · {(s.downloaded_mb / 1024).toFixed(1)} GB</div></div>
+        <div className="stat"><div className="n">{s.downloaded}</div><div className="l">downloaded · {(s.downloaded_mb / 1024).toFixed(1)} GB</div></div>
       </div>
       <div className="two-col">
         <Card title="Last 90 days">

@@ -540,3 +540,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .pv-audio { width: 100%; height: 36px; }
 .pv-notes { font-size: 13.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; padding-right: 6px; overflow-wrap: anywhere; }
 .pv-notes a { word-break: normal; }
+
+/* ---- download state: green when downloaded ---- */
+.pill.ok { background: var(--success-soft); border-color: var(--success); color: var(--green-ink); }
+.pill.ok:hover { border-color: var(--danger); }
+.pill.bad { border-color: var(--danger); color: var(--danger); }
+.pill .spinner.sm { vertical-align: -1px; margin-right: 4px; }
+.dl-btn.done { color: var(--green-ink) !important; background: var(--success-soft) !important; font-weight: 700; }
+.dl-btn.failed { color: var(--danger) !important; }

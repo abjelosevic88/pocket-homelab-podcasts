@@ -55,7 +55,7 @@ export default function Podcast() {
           <h1 className="pod-title">{p.title}</h1>
           {p.author && <div className="pod-author">{p.author}</div>}
           <div className="muted small pod-facts">
-            <span>{p.episode_count} episodes</span>{p.unplayed_count > 0 && <span>{p.unplayed_count} unplayed</span>}{p.downloaded_count > 0 && <span>{p.downloaded_count} on server · {bytes(p.downloaded_bytes)}</span>}
+            <span>{p.episode_count} episodes</span>{p.unplayed_count > 0 && <span>{p.unplayed_count} unplayed</span>}{p.downloaded_count > 0 && <span>{p.downloaded_count} downloaded · {bytes(p.downloaded_bytes)}</span>}
             {p.last_refresh_ok && <span title={p.last_refresh_ok}>checked {ago(p.last_refresh_ok)}</span>}{p.refreshing && <span className="row"><span className="spinner sm" /> refreshing</span>}
           </div>
           {p.last_error && <div className="callout danger small mt-sm">Last refresh failed: {p.last_error}{p.failures > 1 && ` (${p.failures}× in a row — next try is spaced out)`}</div>}

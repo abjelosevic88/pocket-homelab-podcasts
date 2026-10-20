@@ -77,7 +77,6 @@ export default function EpisodePage() {
               {meta.map(m => <span key={m}>{m}</span>)}
               {e.completed && <span className="badge ok-badge">played</span>}
               {e.queue_pos > 0 && <span className="badge cat">#{e.queue_pos} in queue</span>}
-              {e.download === 'done' && <span className="badge" title="The audio file is stored on your Pocket Podcasts server">on your server</span>}
               {e.has_sponsors && <span className="badge" title="SponsorBlock segments are skipped while playing">SponsorBlock</span>}
             </div>
             <div className="epx-play">
@@ -96,14 +95,21 @@ export default function EpisodePage() {
               <button className="pill" onClick={() => run(async () => upd(await act.queue(e, true)))} disabled={busy || e.queue_pos === 1}>↱ Play next</button>
               <button className={`pill ${e.saved ? 'on' : ''}`} onClick={() => run(async () => upd(await act.save(e)))} disabled={busy}>{e.saved ? '♥ Saved' : '♡ Save'}</button>
               <button className={`pill ${e.completed ? 'on' : ''}`} onClick={() => run(async () => upd(await act.played(e, !e.completed)))} disabled={busy}>{e.completed ? '✓ Played' : '○ Mark played'}</button>
+              {e.download === 'done'
+                ? <button className="pill ok" onClick={() => { if (confirm(`Delete the downloaded file (${bytes(e.file_bytes)})? The episode stays and can be downloaded again.`)) run(async () => upd(await act.download(e))) }} disabled={busy} title={`Downloaded to your Pocket Podcasts server (${bytes(e.file_bytes)}). Plays instantly and stays even if the publisher removes it. Click to delete the file.`}>✓ Downloaded</button>
+                : downloading
+                  ? <button className="pill" disabled><span className="spinner sm" /> Downloading…</button>
+                  : e.download === 'failed'
+                    ? <button className="pill bad" onClick={() => run(async () => upd(await act.download(e)))} disabled={busy} title={e.download_error}>⚠ Download failed — retry</button>
+                    : <button className="pill" onClick={() => run(async () => upd(await act.download(e)))} disabled={busy} title="Download the audio to your Pocket Podcasts server">↓ Download</button>}
               <div className="menu-wrap" ref={menuRef}>
                 <button className="pill" onClick={() => setMenu(m => !m)} aria-label="More">⋯</button>
                 {menu && (
                   <div className="menu" onClick={() => setMenu(false)}>
                     <button onClick={() => player.play(e, { fromStart: true })}>Play from the start</button>
                     {e.download === 'done'
-                      ? <><a href={`${e.stream_url}?download=1`}>Save a copy to this device</a><button onClick={() => run(async () => upd(await act.download(e)))}>Delete the server copy</button></>
-                      : !downloading && <button onClick={() => run(async () => upd(await act.download(e)))}>Keep a copy on the server</button>}
+                      ? <><a href={`${e.stream_url}?download=1`}>Save the file to this device</a><button onClick={() => { if (confirm('Delete the downloaded file?')) run(async () => upd(await act.download(e))) }}>Delete download</button></>
+                      : !downloading && <button onClick={() => run(async () => upd(await act.download(e)))}>Download</button>}
                     {e.link && <a href={e.link} target="_blank" rel="noreferrer">{e.podcast_kind === 'youtube' || e.youtube_id ? 'Watch on YouTube ↗' : 'Open the episode page ↗'}</a>}
                     {e.transcript_url && <a href={e.transcript_url} target="_blank" rel="noreferrer">Transcript ↗</a>}
                     {e.last_played_at && <button onClick={() => run(async () => { await api.del(`${V1}/episodes/${e.id}/history`); setData({ ...e, play_position: 0, completed: false, last_played_at: '' }) })}>Forget my progress</button>}
@@ -159,7 +165,7 @@ export default function EpisodePage() {
               {e.pub_date && <><dt>Published</dt><dd>{fmtDate(e.pub_date)}</dd></>}
               {e.duration > 0 && <><dt>Length</dt><dd>{fmtDur(e.duration)}</dd></>}
               {e.last_played_at && <><dt>Last played</dt><dd>{fmtDate(e.last_played_at)}{e.play_count > 1 && ` · ${e.play_count}×`}</dd></>}
-              <dt>Audio</dt><dd>{e.download === 'done' ? <>On your server · {bytes(e.file_bytes)}</> : e.download === 'none' ? 'Streams from the publisher' : DL_LABEL[e.download]}{e.download_error && <div className="bad small">{e.download_error}</div>}</dd>
+              <dt>Download</dt><dd>{e.download === 'done' ? <span className="ok">✓ Downloaded · {bytes(e.file_bytes)}</span> : e.download === 'none' || e.download === 'culled' ? 'Not downloaded — streams from the publisher' : DL_LABEL[e.download]}{e.download_error && <div className="bad small">{e.download_error}</div>}</dd>
             </dl>
           </div>
         </aside>
