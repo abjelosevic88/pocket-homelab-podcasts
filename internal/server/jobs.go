@@ -105,6 +105,9 @@ func (s *Server) refreshDue(ctx context.Context) {
 // refreshPodcast fetches new episodes of one subscription. For YouTube a
 // listing fetched by the caller (at subscribe time) can be passed in.
 func (s *Server) refreshPodcast(ctx context.Context, p *store.Podcast, listing *ytdlp.Listing) (newCount int, err error) {
+	if p.FeedURL == PicksFeedURL {
+		return 0, nil // hand-picked episodes: nothing to fetch
+	}
 	if _, busy := s.refreshing.LoadOrStore(p.ID, true); busy {
 		return 0, errors.New("already refreshing")
 	}
@@ -415,7 +418,7 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 	var rel string
 	var bytes int64
 	mimeType := "audio/mpeg"
-	if p.Kind == store.KindYouTube {
+	if p.Kind == store.KindYouTube || e.YouTubeID != "" {
 		d, err := s.yt.DownloadAudio(ctx, e.Link, dir, base, p.SponsorBlock)
 		if err != nil {
 			s.downloadFailed(ctx, p, e, err)

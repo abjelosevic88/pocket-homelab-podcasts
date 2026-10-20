@@ -258,6 +258,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/playlists/{id}/episodes", s.handlePlaylistEpisodes)
 
 			r.Post("/youtube/video", s.handleAddVideo)
+			r.Post("/picks", s.handlePickEpisode)
 
 			r.Get("/users", s.handleListUsers)
 			r.Post("/users", s.handleCreateUser)

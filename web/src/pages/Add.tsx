@@ -72,7 +72,10 @@ function Results({ results }: { results: SearchResult[] }) {
             <div className="meta">{r.author}{r.episodes > 0 && ` · ${r.episodes} episodes`}{r.last_update && ` · ${fmtDate(r.last_update)}`}{r.categories?.length > 0 && ` · ${r.categories.slice(0, 2).join(', ')}`}</div>
             {r.description && <div className="muted small clamp2">{r.description}</div>}
           </div>
-          {r.subscribed_id ? <Link className="btn sm" to={`/podcasts/${r.subscribed_id}`}>✓ Following</Link> : <button className="btn primary sm" onClick={() => subscribe(r)} disabled={busy === r.feed_url}>{busy === r.feed_url ? 'Adding…' : '+ Follow'}</button>}
+          <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+            <Link className="btn sm" to={`/add?tab=url&url=${encodeURIComponent(r.feed_url)}`} title="See the episodes and take just one">Episodes</Link>
+            {r.subscribed_id ? <Link className="btn sm" to={`/podcasts/${r.subscribed_id}`}>✓ Following</Link> : <button className="btn primary sm" onClick={() => subscribe(r)} disabled={busy === r.feed_url}>{busy === r.feed_url ? 'Adding…' : '+ Follow'}</button>}
+          </div>
         </li>
       ))}
     </ul>
@@ -83,14 +86,25 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
   const navigate = useNavigate()
   const { toast } = useToast()
   const { settings } = useApp()
-  const [url, setUrl] = useState('')
+  const [sp] = useSearchParams()
+  const [url, setUrl] = useState(sp.get('url') || '')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState(false)
+  const [picked, setPicked] = useState<Record<string, 'busy' | 'done'>>({})
+  const [showAll, setShowAll] = useState(false)
+  const [epQ, setEpQ] = useState('')
   const [opts, setOpts] = useState({ download_limit: settings?.youtube_limit ?? 3, retention_days: settings?.retention_days ?? 0, min_duration: settings?.youtube_min_duration ?? 120, title_filter: '', auto_download: settings?.auto_download_default ?? false, notify: false, pub_date_mode: 'published' })
-  useEffect(() => { setPreview(null) }, [url])
-  const look = async (e: React.FormEvent) => {
-    e.preventDefault(); setBusy(true)
-    try { setPreview(await api.post<Preview>(`${V1}/preview`, { url })) } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
+  useEffect(() => { setPreview(null); setPicked({}); setShowAll(false); setEpQ('') }, [url])
+  const lookup = async (u: string) => {
+    setBusy(true)
+    try { setPreview(await api.post<Preview>(`${V1}/preview`, { url: u })) } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
+  }
+  const look = async (e: React.FormEvent) => { e.preventDefault(); lookup(url) }
+  useEffect(() => { const u = sp.get('url'); if (u) lookup(u) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = async (guid: string, title: string) => {
+    if (!preview) return
+    setPicked(p => ({ ...p, [guid]: 'busy' }))
+    try { const ep = await api.post<{ id: number }>(`${V1}/picks`, { feed_url: preview.url, guid, title }); setPicked(p => ({ ...p, [guid]: 'done' })); toast(`“${title}” is in your Picks and downloading`); if (!preview.subscribed_id) toast('Find it under Podcasts → Picks', 'ok'); void ep } catch (err) { setPicked(p => { const n = { ...p }; delete n[guid]; return n }); toast((err as Error).message, 'err') }
   }
   const subscribe = async () => {
     if (!preview) return
@@ -139,10 +153,21 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
               </div>
             </div>
             {preview.episodes && preview.episodes.length > 0 && (
-              <ul className="mini-list mt">
-                {preview.episodes.map((e, i) => <li key={i}><span className="grow">{e.title}</span><span className="muted small">{e.duration ? fmtDur(e.duration) : ''}{e.date && e.date.length >= 8 ? ` · ${e.date.length === 8 ? e.date.slice(0, 4) + '-' + e.date.slice(4, 6) + '-' + e.date.slice(6) : fmtDate(e.date)}` : ''}</span></li>)}
-                {preview.episode_count && preview.episode_count > preview.episodes.length && <li className="muted small">… and {preview.episode_count - preview.episodes.length} more</li>}
-              </ul>
+              <div className="mt">
+                <div className="row mb-sm"><b>Episodes</b><span className="muted small">{preview.kind === 'rss' ? '— take one without following the show' : ''}</span><span className="spacer" />{preview.episodes.length > 8 && <input value={epQ} onChange={e => setEpQ(e.target.value)} placeholder="Filter…" style={{ width: 160, padding: '4px 8px' }} />}</div>
+                <ul className="mini-list pick-list-eps">
+                  {preview.episodes.filter(e => !epQ || e.title.toLowerCase().includes(epQ.toLowerCase())).slice(0, showAll || epQ ? 60 : 8).map((e, i) => (
+                    <li key={e.guid || i}>
+                      <span className="grow" style={{ minWidth: 0 }}><span className="block" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={e.title}>{e.title}</span><span className="muted small">{[e.duration ? fmtDur(e.duration) : '', e.date && e.date.length >= 8 ? (e.date.length === 8 ? e.date.slice(0, 4) + '-' + e.date.slice(4, 6) + '-' + e.date.slice(6) : fmtDate(e.date)) : ''].filter(Boolean).join(' · ')}</span></span>
+                      {preview.kind === 'rss' && e.guid && e.has_audio !== false && (
+                        picked[e.guid] === 'done' ? <span className="badge ok-badge">✓ picked</span>
+                          : <button className="btn sm" onClick={() => pick(e.guid!, e.title)} disabled={picked[e.guid] === 'busy'} title="Download just this episode into your Picks">{picked[e.guid] === 'busy' ? '…' : '↓ Get'}</button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {!showAll && !epQ && preview.episodes.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {Math.min(60, preview.episodes.length) - 8} more{preview.episode_count && preview.episode_count > 60 ? ` (of ${preview.episode_count})` : ''}</button>}
+              </div>
             )}
             <div className="form-actions mt">
               {preview.subscribed_id ? <Link className="btn" to={`/podcasts/${preview.subscribed_id}`}>✓ Already following — open</Link> : <button className="btn primary lg" onClick={subscribe} disabled={busy}>{busy ? 'Adding…' : preview.kind === 'video' ? '↓ Download as episode' : '+ Subscribe'}</button>}
@@ -154,11 +179,12 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
               {yt ? <>
                 <li>A channel subscription fetches the newest videos now and every upload after that.</li>
                 <li>Unlisted playlists work: make a “Watch later” playlist, paste its link, and whatever you add appears here as audio.</li>
-                <li>Single videos go into a “YouTube picks” podcast.</li>
+                <li>Single videos go into your “Picks” show — no need to follow the channel.</li>
                 <li>SponsorBlock segments are fetched with each video and skipped while you listen.</li>
                 <li>Every subscription gets a public RSS feed (Settings → Feeds) for Apple Podcasts, Overcast or AntennaPod.</li>
               </> : <>
                 <li>Most podcast pages link their RSS feed; Apple Podcasts links can be searched by name on the Search tab.</li>
+                <li>Want one episode only (a guest you like, one talk)? Look the feed up and press <b>↓ Get</b> next to it: it lands in your “Picks” show, downloaded, without following the whole podcast. Search results have an <b>Episodes</b> button for the same.</li>
                 <li>Private feeds with a token in the URL work as they are.</li>
                 <li>Import a whole OPML file under Settings → Backup & data.</li>
               </>}

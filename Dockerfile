@@ -21,11 +21,13 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 # ---------- 3. runtime ----------
 # yt-dlp (latest from PyPI, with its JS-challenge helper), deno as the JavaScript
-# runtime YouTube now requires, ffmpeg for audio extraction. `pip --target` into
+# runtime YouTube now requires (node where Alpine has no deno build; the app
+# passes --js-runtimes node then), ffmpeg for audio extraction. `pip --target` into
 # DATA_DIR/ytdlp (Settings → Feeds & downloads → Update) keeps yt-dlp current
 # without rebuilding the image.
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates tzdata curl python3 py3-pip ffmpeg deno \
+RUN apk add --no-cache ca-certificates tzdata curl python3 py3-pip ffmpeg \
+ && (apk add --no-cache deno || apk add --no-cache nodejs) \
  && pip install --no-cache-dir --break-system-packages 'yt-dlp[default]' \
  && addgroup -g 1000 app && adduser -u 1000 -G app -D -h /data app
 COPY --from=build /out/pocket-podcasts /usr/local/bin/pocket-podcasts

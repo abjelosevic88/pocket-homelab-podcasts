@@ -150,10 +150,10 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 	f := res.Feed
 	items := []map[string]any{}
 	for i, it := range f.Items {
-		if i == 10 {
+		if i == 60 {
 			break
 		}
-		items = append(items, map[string]any{"title": it.Title, "duration": it.Duration, "date": store.FormatTime(it.PubDate)})
+		items = append(items, map[string]any{"title": it.Title, "duration": it.Duration, "date": store.FormatTime(it.PubDate), "guid": it.GUID, "description": feed.StripHTML(it.Description), "image": it.Image, "has_audio": it.EnclosureURL != ""})
 	}
 	existing, _ := s.store.FindPodcastByFeed(r.Context(), me(r), u)
 	out := map[string]any{"kind": "rss", "url": u, "title": f.Title, "author": f.Author, "image": f.Image, "description": feed.StripHTML(f.Description), "episodes": items, "episode_count": len(f.Items)}

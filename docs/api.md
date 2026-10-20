@@ -15,7 +15,8 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 - `POST /podcasts/{id}/favorite {favorite}` · `POST /podcasts/{id}/played {played}` · `POST /podcasts/{id}/download {count}` · `DELETE /podcasts/{id}/files?played=1`
 - `GET /podcasts/{id}/episodes?…` (same filters as `/episodes`)
 - `GET|POST|DELETE /podcasts/{id}/artwork` (POST: multipart `file` or JSON `{url}`)
-- `POST /youtube/video {url}` → downloads one video into the "YouTube picks" subscription.
+- `POST /youtube/video {url}` → downloads one video into your "Picks" show.
+- `POST /picks {feed_url, guid|title, download?}` → one episode of any feed into your "Picks" show (no subscription), downloaded unless `download: false`. `guid` comes from `/preview`.
 
 ## Episodes
 - `GET /episodes?q=&status=unplayed|partial|played|unfinished&downloaded=1|0&days=&kind=&podcast=&min_duration=&max_duration=&sort=newest|oldest|shortest|longest&limit=&offset=` → `{episodes[], total}`

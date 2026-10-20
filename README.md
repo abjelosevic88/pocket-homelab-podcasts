@@ -6,10 +6,39 @@ Pocket Podcasts keeps your subscriptions, plays them in the browser (and remembe
 
 It replaces PinePods for people who want the same ideas with less machinery: no Postgres, no Valkey, no separate YouTube downloader, and a YouTube path that actually works.
 
+<p align="center"><img src="docs/screenshots/home.png" width="900" alt="Home: continue listening, up next, podcasts, new episodes"></p>
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/podcast.png" alt="A YouTube channel as a podcast: episodes with download state, SponsorBlock badges, per-show settings"></td>
+    <td width="50%"><img src="docs/screenshots/player.png" alt="The player: artwork, SponsorBlock on, speed, sleep timer, chapters"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/add.png" alt="Adding: directory search with Follow or Episodes per result"></td>
+    <td width="50%"><img src="docs/screenshots/add-pick.png" alt="Picking a single episode of a show without following it"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/episode.png" alt="An episode: chapters, SponsorBlock segments, notes, actions"></td>
+    <td width="50%"><img src="docs/screenshots/playlists.png" alt="Smart playlists"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/downloads.png" alt="Downloads: running, failed and on disk"></td>
+    <td width="50%"><img src="docs/screenshots/settings-feeds.png" alt="Public feeds for Apple Podcasts, Overcast, AntennaPod"></td>
+  </tr>
+</table>
+<p align="center">
+  <img src="docs/screenshots/mobile-home.png" width="260" alt="Home on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-player.png" width="260" alt="The player on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/episodes-dark.png" width="360" alt="Episodes in dark mode">
+</p>
+
 ## What it does
 
 **Subscriptions**
 - Search Apple's directory (no key) and [Podcast Index](https://podcastindex.org) (free key), or paste a feed URL. OPML import and export.
+- **Picks**: take a single episode of a show you do not want to follow (one guest, one talk) — it lands in your "Picks" show, downloaded, next to single YouTube videos.
 - Feeds are checked on a schedule with `ETag` / `Last-Modified`, per-feed intervals and back-off when a feed breaks. Episode artwork, chapters (podcast 2.0), transcripts, seasons and episode numbers are kept.
 - Per-podcast settings: playback speed, skip intro/outro seconds, auto-play next, notifications, auto-download, retention, feed cut-off, custom artwork.
 

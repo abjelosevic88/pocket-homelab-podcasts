@@ -61,6 +61,12 @@ func exists(p string) bool {
 
 func (r *Runner) common() []string {
 	args := []string{"--no-warnings", "--no-progress", "--ignore-config", "--no-cache-dir", "--socket-timeout", "30", "--retries", "3"}
+	// YouTube needs a JavaScript runtime; yt-dlp enables deno by itself, node only when asked
+	if _, err := exec.LookPath("deno"); err != nil {
+		if _, err := exec.LookPath("node"); err == nil {
+			args = append(args, "--js-runtimes", "node")
+		}
+	}
 	if r.Cookies != "" && exists(r.Cookies) {
 		args = append(args, "--cookies", r.Cookies)
 	}
