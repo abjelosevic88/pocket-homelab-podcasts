@@ -443,6 +443,32 @@ func (s *Store) RetireMembersOnly(ctx context.Context, podcastID, id int64) bool
 	return tx.Commit() == nil
 }
 
+// EpisodesByYouTubeIDs maps video ids already in a person's library to an episode id.
+func (s *Store) EpisodesByYouTubeIDs(ctx context.Context, userID int64, ids []string) map[string]int64 {
+	out := map[string]int64{}
+	if len(ids) == 0 {
+		return out
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := []any{userID}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT e.youtube_id, e.id FROM episodes e JOIN podcasts p ON p.id = e.podcast_id WHERE p.user_id = ? AND e.youtube_id IN (`+ph+`)`, args...)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var y string
+		var id int64
+		if rows.Scan(&y, &id) == nil {
+			out[y] = id
+		}
+	}
+	return out
+}
+
 // MissingYouTubeMeta lists downloaded YouTube episodes without show notes
 // (a refresh before 0.1.3 blanked them), oldest first.
 func (s *Store) MissingYouTubeMeta(ctx context.Context, limit int) ([]Episode, error) {

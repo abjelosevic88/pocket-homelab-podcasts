@@ -75,3 +75,4 @@ export interface Home { continue: Episode[]; queue: Episode[]; fresh: Episode[];
 export interface PreviewEpisode { title: string; duration: number; date: string; guid?: string; description?: string; image?: string; has_audio?: boolean; audio?: string; link?: string; season?: number; episode?: number }
 
 export interface YTChannel { id: string; title: string; handle: string; url: string; followers: number; description: string; thumbnail: string; subscribed_id?: number }
+export interface YTItem { kind: 'video' | 'playlist'; id: string; title: string; url: string; channel: string; channel_id: string; duration?: number; views?: number; description?: string; thumbnail: string; live?: boolean; subscribed_id?: number; episode_id?: number }

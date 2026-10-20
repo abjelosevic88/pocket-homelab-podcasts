@@ -426,15 +426,50 @@ type Channel struct {
 
 var avatarSize = regexp.MustCompile(`=s\d+-`)
 
-// SearchChannels asks YouTube's search for channels (one request, ~1 s).
-func (r *Runner) SearchChannels(ctx context.Context, q string, limit int) ([]Channel, error) {
+// SearchResult is a video or playlist found by a search.
+type SearchResult struct {
+	Kind        string `json:"kind"` // video | playlist
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Channel     string `json:"channel"`
+	ChannelID   string `json:"channel_id"`
+	Duration    int    `json:"duration,omitempty"`
+	Views       int64  `json:"views,omitempty"`
+	Description string `json:"description,omitempty"`
+	Thumbnail   string `json:"thumbnail"`
+	MembersOnly bool   `json:"members_only,omitempty"`
+	Live        bool   `json:"live,omitempty"`
+}
+
+type rawSearchEntry struct {
+	ID           string     `json:"id"`
+	URL          string     `json:"url"`
+	Title        string     `json:"title"`
+	Channel      string     `json:"channel"`
+	ChannelID    string     `json:"channel_id"`
+	ChannelURL   string     `json:"channel_url"`
+	Uploader     string     `json:"uploader"`
+	UploaderID   string     `json:"uploader_id"`
+	Followers    int64      `json:"channel_follower_count"`
+	Duration     float64    `json:"duration"`
+	Views        int64      `json:"view_count"`
+	Description  string     `json:"description"`
+	Availability string     `json:"availability"`
+	LiveStatus   string     `json:"live_status"`
+	Thumbnails   []rawThumb `json:"thumbnails"`
+}
+
+// YouTube's own search filters ("type: channel / video / playlist").
+var searchFilter = map[string]string{"channel": "EgIQAg%253D%253D", "video": "EgIQAQ%253D%253D", "playlist": "EgIQAw%253D%253D"}
+
+func (r *Runner) search(ctx context.Context, q, kind string, limit int) ([]rawSearchEntry, error) {
 	if limit <= 0 {
 		limit = 12
 	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	// sp=EgIQAg== is YouTube's own "type: channel" search filter
-	u := "https://www.youtube.com/results?search_query=" + url.QueryEscape(q) + "&sp=EgIQAg%253D%253D"
+	u := "https://www.youtube.com/results?search_query=" + url.QueryEscape(q) + "&sp=" + searchFilter[kind]
 	args := append(r.common(), "--flat-playlist", "-J", "--playlist-end", fmt.Sprint(limit), u)
 	c := r.cmd(ctx, args...)
 	var stderr bytes.Buffer
@@ -444,36 +479,79 @@ func (r *Runner) SearchChannels(ctx context.Context, q string, limit int) ([]Cha
 		return nil, fmt.Errorf("yt-dlp: %s", friendly(stderr.String(), err))
 	}
 	var raw struct {
-		Entries []struct {
-			ID          string     `json:"id"`
-			Title       string     `json:"title"`
-			Channel     string     `json:"channel"`
-			ChannelID   string     `json:"channel_id"`
-			ChannelURL  string     `json:"channel_url"`
-			UploaderID  string     `json:"uploader_id"`
-			Followers   int64      `json:"channel_follower_count"`
-			Description string     `json:"description"`
-			Thumbnails  []rawThumb `json:"thumbnails"`
-		} `json:"entries"`
+		Entries []rawSearchEntry `json:"entries"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, fmt.Errorf("yt-dlp: unreadable search results: %w", err)
 	}
+	return raw.Entries, nil
+}
+
+func thumbURL(th []rawThumb) string {
+	t := bestThumb(th, "")
+	if strings.HasPrefix(t, "//") {
+		t = "https:" + t
+	}
+	return t
+}
+
+// SearchChannels asks YouTube's search for channels (one request, ~1 s).
+func (r *Runner) SearchChannels(ctx context.Context, q string, limit int) ([]Channel, error) {
+	entries, err := r.search(ctx, q, "channel", limit)
+	if err != nil {
+		return nil, err
+	}
 	res := []Channel{}
-	for _, e := range raw.Entries {
+	for _, e := range entries {
 		id := firstNonEmpty(e.ChannelID, e.ID)
 		if !strings.HasPrefix(id, "UC") {
 			continue
 		}
 		ch := Channel{ID: id, Title: firstNonEmpty(e.Title, e.Channel), Handle: e.UploaderID, Followers: e.Followers, Description: e.Description,
 			URL: firstNonEmpty(e.ChannelURL, "https://www.youtube.com/channel/"+id)}
-		if t := bestThumb(e.Thumbnails, ""); t != "" {
-			if strings.HasPrefix(t, "//") {
-				t = "https:" + t
-			}
+		if t := thumbURL(e.Thumbnails); t != "" {
 			ch.Thumbnail = avatarSize.ReplaceAllString(t, "=s240-")
 		}
 		res = append(res, ch)
+	}
+	return res, nil
+}
+
+// SearchVideos asks YouTube's search for videos.
+func (r *Runner) SearchVideos(ctx context.Context, q string, limit int) ([]SearchResult, error) {
+	entries, err := r.search(ctx, q, "video", limit)
+	if err != nil {
+		return nil, err
+	}
+	res := []SearchResult{}
+	for _, e := range entries {
+		if len(e.ID) != 11 {
+			continue
+		}
+		v := SearchResult{Kind: KindVideo, ID: e.ID, Title: e.Title, URL: "https://www.youtube.com/watch?v=" + e.ID, Channel: firstNonEmpty(e.Channel, e.Uploader),
+			ChannelID: e.ChannelID, Duration: int(e.Duration), Views: e.Views, Description: e.Description, Thumbnail: thumbURL(e.Thumbnails),
+			MembersOnly: e.Availability == "subscriber_only" || e.Availability == "premium_only", Live: e.LiveStatus == "is_live" || e.LiveStatus == "is_upcoming"}
+		if v.Thumbnail == "" {
+			v.Thumbnail = "https://i.ytimg.com/vi/" + e.ID + "/hqdefault.jpg"
+		}
+		res = append(res, v)
+	}
+	return res, nil
+}
+
+// SearchPlaylists asks YouTube's search for playlists.
+func (r *Runner) SearchPlaylists(ctx context.Context, q string, limit int) ([]SearchResult, error) {
+	entries, err := r.search(ctx, q, "playlist", limit)
+	if err != nil {
+		return nil, err
+	}
+	res := []SearchResult{}
+	for _, e := range entries {
+		if e.ID == "" {
+			continue
+		}
+		res = append(res, SearchResult{Kind: KindPlaylist, ID: e.ID, Title: e.Title, URL: "https://www.youtube.com/playlist?list=" + e.ID,
+			Channel: firstNonEmpty(e.Channel, e.Uploader), ChannelID: e.ChannelID, Thumbnail: thumbURL(e.Thumbnails)})
 	}
 	return res, nil
 }

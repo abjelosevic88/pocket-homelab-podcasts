@@ -43,7 +43,7 @@ It replaces PinePods for people who want the same ideas with less machinery: no 
 - Per-podcast settings: playback speed, skip intro/outro seconds, auto-play next, notifications, auto-download, retention, feed cut-off, custom artwork.
 
 **YouTube as podcasts**
-- **Search YouTube channels by name** (Add → YouTube, or under the podcast results in Search) and subscribe with one click — or paste a channel (`@handle`, `/channel/UC…`), a playlist (also unlisted — a "Watch later" playlist you control) or a single video. The channel is indexed in about a second with `yt-dlp --flat-playlist`; the newest N videos are downloaded as `m4a` with ffmpeg, then every new upload after that.
+- **Search YouTube** for channels, videos and playlists (Add → YouTube; the best channels and videos also show under the podcast results in Search): subscribe to a channel or playlist in one click, or take a single video as audio into your Picks with **↓ Get** — or paste a channel (`@handle`, `/channel/UC…`), a playlist (also unlisted — a "Watch later" playlist you control) or a single video. The channel is indexed in about a second with `yt-dlp --flat-playlist`; the newest N videos are downloaded as `m4a` with ffmpeg, then every new upload after that.
 - Filters: minimum length (keeps Shorts out), title regex, per-source retention.
 - [SponsorBlock](https://sponsor.ajay.app) segments are fetched with every video and the player skips the categories you choose (sponsor, self-promotion, reminders, intro, outro…). Nothing is cut from the file.
 - Episode date can be the upload date or the download date (the latter keeps old videos you add later at the top of podcast apps).

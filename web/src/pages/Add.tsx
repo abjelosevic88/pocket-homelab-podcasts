@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel } from '../lib/types'
+import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel, YTItem } from '../lib/types'
 import { safeHTML } from '../components/Player'
 import { Card, Empty, Field, Loading, PageHeader, Segmented, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
 import { Artwork } from '../components/Artwork'
-import { compact, fmtDate, fmtDur } from '../lib/format'
+import { clock, compact, fmtDate, fmtDur } from '../lib/format'
 
 type Tab = 'search' | 'url' | 'youtube' | 'trending'
 
@@ -25,7 +25,7 @@ export default function Add() {
       <div className="mt">
         {tab === 'search' && <Search />}
         {tab === 'url' && <ByURL kind="rss" />}
-        {tab === 'youtube' && <><ChannelSearch /><ByURL kind="youtube" /></>}
+        {tab === 'youtube' && <><YouTubeSearch /><ByURL kind="youtube" /></>}
         {tab === 'trending' && <Trending />}
       </div>
     </>
@@ -239,35 +239,124 @@ function PreviewEpisodes({ preview, picked, onPick }: { preview: Preview; picked
   )
 }
 
-/** YouTube channel search: one click subscribes, "Videos" looks first. */
-function ChannelSearch() {
-  const [sp] = useSearchParams()
+type YTKind = 'channel' | 'video' | 'playlist'
+const YT_PLACEHOLDER: Record<YTKind, string> = { channel: 'Search YouTube channels…', video: 'Search YouTube videos…', playlist: 'Search YouTube playlists…' }
+
+/** YouTube search: channels and playlists subscribe in one click, a video
+ *  goes into Picks as audio in one click. */
+function YouTubeSearch() {
+  const [sp, setSp] = useSearchParams()
   const { settings } = useApp()
+  const kind = (['video', 'playlist'].includes(sp.get('yt') || '') ? sp.get('yt') : 'channel') as YTKind
   const [q, setQ] = useState(sp.get('q') || '')
   const dq = useDebounce(q, 450)
-  const { data, loading, error } = useAsync(async () => dq.trim().length < 2 ? null : api.get<{ results: YTChannel[] }>(`${V1}/youtube/search?q=${encodeURIComponent(dq)}&limit=12`), [dq])
+  const { data, loading, error } = useAsync(async () => dq.trim().length < 2 ? null : api.get<{ results: (YTChannel | YTItem)[] }>(`${V1}/youtube/search?type=${kind}&q=${encodeURIComponent(dq)}&limit=${kind === 'video' ? 20 : 12}`), [dq, kind])
+  const setKind = (k: YTKind) => { const n = new URLSearchParams(sp); if (k === 'channel') n.delete('yt'); else n.set('yt', k); n.delete('url'); setSp(n, { replace: true }) }
   if (!settings?.yt_dlp) return null
   return (
     <div className="mb">
-      <div className="search-bar mb"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search YouTube channels…" autoFocus={!sp.get('url')} />{loading && dq.trim().length >= 2 && <span className="spinner" />}</div>
+      <div className="yts-top">
+        <div className="search-bar grow"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder={YT_PLACEHOLDER[kind]} autoFocus={!sp.get('url')} />{loading && dq.trim().length >= 2 && <span className="spinner" />}</div>
+        <Segmented value={kind} onChange={setKind} options={[{ value: 'channel', label: 'Channels' }, { value: 'video', label: 'Videos' }, { value: 'playlist', label: 'Playlists' }]} />
+      </div>
       {error && <div className="callout danger small mb">{error}</div>}
-      {data && data.results.length === 0 && <p className="muted">No channels found.</p>}
-      {data && data.results.length > 0 && <ChannelResults results={data.results} />}
-      {!data && <p className="muted small">Search by name, or paste a channel, playlist or video link below.</p>}
+      {data && data.results.length === 0 && <p className="muted">Nothing found.</p>}
+      {data && data.results.length > 0 && (kind === 'channel'
+        ? <ChannelResults results={data.results as YTChannel[]} />
+        : kind === 'video' ? <VideoResults results={data.results as YTItem[]} /> : <PlaylistResults results={data.results as YTItem[]} />)}
+      {!data && <p className="muted small">{kind === 'video' ? 'Find a video and press ↓ Get: it downloads as audio into your Picks — no need to follow the channel.' : kind === 'playlist' ? 'Subscribe to a playlist and every video added to it later downloads too.' : 'Search by name, or paste a channel, playlist or video link below.'}</p>}
     </div>
   )
 }
 
-/** The best YouTube channel matches under the podcast search results. */
-function YouTubeMatches({ q }: { q: string }) {
-  const { data, loading } = useAsync(() => api.get<{ results: YTChannel[] }>(`${V1}/youtube/search?q=${encodeURIComponent(q)}&limit=12`), [q])
-  if (loading && !data) return <p className="muted small mt"><span className="spinner sm" /> Looking on YouTube…</p>
-  if (!data || data.results.length === 0) return null
+/** Videos: ↓ Get puts one into Picks (audio); already-taken ones link to their episode. */
+function VideoResults({ results, compactList = false }: { results: YTItem[]; compactList?: boolean }) {
+  const { toast } = useToast()
+  const [got, setGot] = useState<Record<string, number | 'busy'>>({})
+  const get = async (v: YTItem) => {
+    setGot(g => ({ ...g, [v.id]: 'busy' }))
+    try { const ep = await api.post<{ id: number }>(`${V1}/youtube/video`, { url: v.url }); setGot(g => ({ ...g, [v.id]: ep.id })); toast(`“${v.title}” is downloading into your Picks`) }
+    catch (e) { setGot(g => { const n = { ...g }; delete n[v.id]; return n }); toast((e as Error).message, 'err') }
+  }
   return (
-    <section className="mt">
-      <h2 className="yt-head"><span className="yt-dot">▶</span> YouTube channels <Link className="muted small" to={`/add?tab=youtube&q=${encodeURIComponent(q)}`}>all {data.results.length} →</Link></h2>
-      <ChannelResults results={data.results.slice(0, 4)} />
-    </section>
+    <ul className={`yt-videos ${compactList ? 'compact' : ''}`}>
+      {results.map(v => {
+        const have = got[v.id] ?? v.episode_id
+        return (
+          <li key={v.id} className="yt-video">
+            <a className="yt-thumb" href={v.url} target="_blank" rel="noreferrer" title="Watch on YouTube">
+              <img src={v.thumbnail} alt="" loading="lazy" />
+              {v.duration ? <span className="yt-dur">{clock(v.duration)}</span> : v.live ? <span className="yt-dur live">LIVE</span> : null}
+            </a>
+            <div className="info">
+              <div className="nm" title={v.title}>{v.title}</div>
+              <div className="meta">{[v.channel, v.views ? `${compact(v.views)} views` : '', v.duration ? fmtDur(v.duration) : ''].filter(Boolean).join(' · ')}</div>
+              {!compactList && v.description && <div className="muted small clamp2">{v.description}</div>}
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+              {typeof have === 'number'
+                ? <Link className="btn sm" to={`/episodes/${have}`}>✓ In library</Link>
+                : <button className="btn primary sm" onClick={() => get(v)} disabled={have === 'busy' || v.live} title="Download as audio into your Picks">{have === 'busy' ? 'Adding…' : '↓ Get'}</button>}
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function PlaylistResults({ results }: { results: YTItem[] }) {
+  const { toast } = useToast()
+  const [subs, setSubs] = useState<Record<string, number | 'busy'>>({})
+  const subscribe = async (p: YTItem) => {
+    setSubs(s => ({ ...s, [p.id]: 'busy' }))
+    try { const pod = await api.post<Podcast>(`${V1}/podcasts`, { url: p.url }); setSubs(s => ({ ...s, [p.id]: pod.id })); toast(`Subscribed to ${pod.title} — the newest videos are downloading`) }
+    catch (e) { setSubs(s => { const n = { ...s }; delete n[p.id]; return n }); toast((e as Error).message, 'err') }
+  }
+  return (
+    <ul className="yt-videos">
+      {results.map(p => {
+        const sub = subs[p.id] ?? p.subscribed_id
+        return (
+          <li key={p.id} className="yt-video">
+            <a className="yt-thumb" href={p.url} target="_blank" rel="noreferrer" title="Open on YouTube"><img src={p.thumbnail} alt="" loading="lazy" /><span className="yt-dur">☰ playlist</span></a>
+            <div className="info">
+              <div className="nm" title={p.title}>{p.title}</div>
+              <div className="meta">{p.channel}</div>
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+              <Link className="btn sm" to={`/add?tab=youtube&yt=playlist&url=${encodeURIComponent(p.url)}`} title="See its videos first">Videos</Link>
+              {typeof sub === 'number'
+                ? <Link className="btn sm" to={`/podcasts/${sub}`}>✓ Following</Link>
+                : <button className="btn primary sm" onClick={() => subscribe(p)} disabled={sub === 'busy'}>{sub === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/** The best YouTube matches (channels and videos) under the podcast search results. */
+function YouTubeMatches({ q }: { q: string }) {
+  const ch = useAsync(() => api.get<{ results: YTChannel[] }>(`${V1}/youtube/search?type=channel&q=${encodeURIComponent(q)}&limit=12`), [q])
+  const vids = useAsync(() => api.get<{ results: YTItem[] }>(`${V1}/youtube/search?type=video&q=${encodeURIComponent(q)}&limit=20`), [q])
+  if (ch.loading && vids.loading && !ch.data && !vids.data) return <p className="muted small mt"><span className="spinner sm" /> Looking on YouTube…</p>
+  return (
+    <>
+      {ch.data && ch.data.results.length > 0 && (
+        <section className="mt">
+          <h2 className="yt-head"><span className="yt-dot">▶</span> YouTube channels <Link className="muted small" to={`/add?tab=youtube&q=${encodeURIComponent(q)}`}>all {ch.data.results.length} →</Link></h2>
+          <ChannelResults results={ch.data.results.slice(0, 3)} />
+        </section>
+      )}
+      {vids.data && vids.data.results.length > 0 && (
+        <section className="mt">
+          <h2 className="yt-head"><span className="yt-dot">▶</span> YouTube videos <Link className="muted small" to={`/add?tab=youtube&yt=video&q=${encodeURIComponent(q)}`}>all {vids.data.results.length} →</Link></h2>
+          <VideoResults results={vids.data.results.slice(0, 4)} compactList />
+        </section>
+      )}
+    </>
   )
 }
 

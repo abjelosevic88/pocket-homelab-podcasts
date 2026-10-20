@@ -150,14 +150,15 @@ func (s *Server) handlePickEpisode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.episodeDetail(r, ep))
 }
 
-type channelSearch struct {
-	at  time.Time
-	res []ytdlp.Channel
+type ytSearch struct {
+	at       time.Time
+	channels []ytdlp.Channel
+	items    []ytdlp.SearchResult
 }
 
 var (
-	channelCacheMu sync.Mutex
-	channelCache   = map[string]channelSearch{}
+	ytSearchMu    sync.Mutex
+	ytSearchCache = map[string]ytSearch{}
 )
 
 // channelJSON is a search result with the caller's subscription, if any.
@@ -166,11 +167,23 @@ type channelJSON struct {
 	SubscribedID int64 `json:"subscribed_id,omitempty"`
 }
 
-// handleSearchChannels finds YouTube channels by name (cached ten minutes).
+// itemJSON is a video or playlist found by a search, with what the caller has of it.
+type itemJSON struct {
+	ytdlp.SearchResult
+	SubscribedID int64 `json:"subscribed_id,omitempty"` // playlist followed
+	EpisodeID    int64 `json:"episode_id,omitempty"`    // video already in the library
+}
+
+// handleSearchChannels searches YouTube for channels, videos or playlists
+// (?type=channel|video|playlist, cached ten minutes).
 func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	typ := r.URL.Query().Get("type")
+	if typ != "video" && typ != "playlist" {
+		typ = "channel"
+	}
 	if len(q) < 2 {
-		writeJSON(w, http.StatusOK, map[string]any{"results": []channelJSON{}})
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}})
 		return
 	}
 	if !s.ytAvailable() {
@@ -181,23 +194,31 @@ func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 	if limit == 0 {
 		limit = 12
 	}
-	key := strings.ToLower(q) + "|" + strconv.Itoa(limit)
-	channelCacheMu.Lock()
-	c, ok := channelCache[key]
-	channelCacheMu.Unlock()
+	key := typ + "|" + strings.ToLower(q) + "|" + strconv.Itoa(limit)
+	ytSearchMu.Lock()
+	c, ok := ytSearchCache[key]
+	ytSearchMu.Unlock()
 	if !ok || time.Since(c.at) > 10*time.Minute {
-		res, err := s.yt.SearchChannels(r.Context(), q, limit)
+		var err error
+		c = ytSearch{at: time.Now()}
+		switch typ {
+		case "channel":
+			c.channels, err = s.yt.SearchChannels(r.Context(), q, limit)
+		case "video":
+			c.items, err = s.yt.SearchVideos(r.Context(), q, limit)
+		case "playlist":
+			c.items, err = s.yt.SearchPlaylists(r.Context(), q, limit)
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		c = channelSearch{at: time.Now(), res: res}
-		channelCacheMu.Lock()
-		if len(channelCache) > 200 {
-			channelCache = map[string]channelSearch{}
+		ytSearchMu.Lock()
+		if len(ytSearchCache) > 300 {
+			ytSearchCache = map[string]ytSearch{}
 		}
-		channelCache[key] = c
-		channelCacheMu.Unlock()
+		ytSearchCache[key] = c
+		ytSearchMu.Unlock()
 	}
 	pods, _ := s.store.ListPodcasts(r.Context(), me(r), "", store.KindYouTube, "")
 	byID := map[string]int64{}
@@ -206,9 +227,31 @@ func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 			byID[p.YouTubeID] = p.ID
 		}
 	}
-	out := make([]channelJSON, 0, len(c.res))
-	for _, ch := range c.res {
-		out = append(out, channelJSON{Channel: ch, SubscribedID: byID[ch.ID]})
+	if typ == "channel" {
+		out := make([]channelJSON, 0, len(c.channels))
+		for _, ch := range c.channels {
+			out = append(out, channelJSON{Channel: ch, SubscribedID: byID[ch.ID]})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"results": out})
+		return
+	}
+	var ids []string
+	for _, it := range c.items {
+		ids = append(ids, it.ID)
+	}
+	have := s.store.EpisodesByYouTubeIDs(r.Context(), me(r), ids)
+	out := make([]itemJSON, 0, len(c.items))
+	for _, it := range c.items {
+		if it.MembersOnly && !s.yt.HasCookies() {
+			continue
+		}
+		j := itemJSON{SearchResult: it}
+		if typ == "playlist" {
+			j.SubscribedID = byID[it.ID]
+		} else {
+			j.EpisodeID = have[it.ID]
+		}
+		out = append(out, j)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": out})
 }
