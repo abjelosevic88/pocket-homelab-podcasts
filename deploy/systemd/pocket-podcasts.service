@@ -1,0 +1,20 @@
+[Unit]
+Description=Pocket Podcasts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=podcasts
+Group=podcasts
+WorkingDirectory=/var/lib/pocket-podcasts
+Environment=DATA_DIR=/var/lib/pocket-podcasts PORT=8080 BASE_URL=https://podcasts.example.com SECURE_COOKIES=true
+# yt-dlp, deno (or node) and ffmpeg must be on PATH for YouTube subscriptions
+ExecStart=/usr/local/bin/pocket-podcasts
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/pocket-podcasts
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
