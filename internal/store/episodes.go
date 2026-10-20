@@ -229,13 +229,13 @@ func (s *Store) UpsertEpisode(ctx context.Context, e *Episode) (bool, error) {
 	}
 	if id > 0 {
 		e.ID = id
-		_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET title = ?, description = ?, link = ?,
+		_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET title = ?, description = CASE WHEN ? = '' THEN description ELSE ? END, link = ?,
 			enclosure_url = CASE WHEN ? = '' THEN enclosure_url ELSE ? END, enclosure_type = CASE WHEN ? = '' THEN enclosure_type ELSE ? END,
 			enclosure_bytes = CASE WHEN ? = 0 THEN enclosure_bytes ELSE ? END,
 			duration = CASE WHEN ? = 0 THEN duration ELSE ? END, pub_date = CASE WHEN ? = '' THEN pub_date ELSE ? END,
 			artwork_url = CASE WHEN ? = '' THEN artwork_url ELSE ? END, season = ?, episode_no = ?, episode_type = ?, explicit = ?, is_video = ?,
 			chapters_url = ?, transcript_url = ?, position = CASE WHEN ? < 0 THEN position ELSE ? END WHERE id = ?`,
-			e.Title, e.Description, e.Link, e.EnclosureURL, e.EnclosureURL, e.EnclosureType, e.EnclosureType, e.EnclosureBytes, e.EnclosureBytes,
+			e.Title, e.Description, e.Description, e.Link, e.EnclosureURL, e.EnclosureURL, e.EnclosureType, e.EnclosureType, e.EnclosureBytes, e.EnclosureBytes,
 			e.Duration, e.Duration, e.PubDate, e.PubDate, e.ArtworkURL, e.ArtworkURL, e.Season, e.EpisodeNo, e.EpisodeType, boolInt(e.Explicit), boolInt(e.IsVideo),
 			e.ChaptersURL, e.TranscriptURL, e.Position, e.Position, id)
 		return false, err
@@ -404,6 +404,25 @@ func (s *Store) LatestEpisodeDate(ctx context.Context, podcastID int64) string {
 	var d string
 	_ = s.DB.QueryRowContext(ctx, `SELECT COALESCE(MAX(pub_date), '') FROM episodes WHERE podcast_id = ?`, podcastID).Scan(&d)
 	return d
+}
+
+// MissingYouTubeMeta lists downloaded YouTube episodes without show notes
+// (a refresh before 0.1.3 blanked them), oldest first.
+func (s *Store) MissingYouTubeMeta(ctx context.Context, limit int) ([]Episode, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, link FROM episodes WHERE youtube_id <> '' AND download = 'done' AND description = '' ORDER BY id LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Episode
+	for rows.Next() {
+		var e Episode
+		if err := rows.Scan(&e.ID, &e.Link); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // EpisodeIDsByYouTube maps a subscription's known video ids to episode ids.

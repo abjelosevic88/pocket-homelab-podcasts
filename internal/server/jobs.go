@@ -252,6 +252,7 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 			PubDate: pub, ArtworkURL: en.Thumbnail, YouTubeID: en.ID, Position: i}
 		if id, ok := known[en.ID]; ok {
 			e.ID = id
+			e.PubDate = ""                                            // the listing's date is approximate; keep the exact one the download stored
 			if _, err := s.store.UpsertEpisode(ctx, &e); err != nil { // keeps the row, refreshes position/title
 				return nil, err
 			}
@@ -638,6 +639,7 @@ func (s *Server) housekeeping(ctx context.Context) {
 		}
 		s.cull(ctx)
 		s.retryFailed(ctx)
+		s.repairYouTubeMeta(ctx)
 		_ = s.store.PurgeSessions(ctx)
 		s.store.PruneActivity(ctx)
 	}
@@ -668,4 +670,28 @@ func (s *Server) retryFailed(ctx context.Context) {
 			s.kickDownloads()
 		}
 	}
+}
+
+// repairYouTubeMeta refetches title, notes and date of downloaded videos that
+// lost them, a few per hour so YouTube is not hammered.
+func (s *Server) repairYouTubeMeta(ctx context.Context) {
+	eps, err := s.store.MissingYouTubeMeta(ctx, 25)
+	if err != nil || len(eps) == 0 {
+		return
+	}
+	fixed := 0
+	for _, e := range eps {
+		in, err := s.yt.VideoInfo(ctx, e.Link)
+		if err != nil {
+			continue
+		}
+		desc := in.Description
+		if desc == "" {
+			desc = " " // nothing to fetch: stop asking
+		}
+		if s.store.SetEpisodeMeta(ctx, e.ID, in.Title, desc, store.FormatTime(in.UploadDate), in.Duration, "", in.WebpageURL) == nil {
+			fixed++
+		}
+	}
+	s.log.Info("restored show notes of YouTube episodes", "n", fixed)
 }
