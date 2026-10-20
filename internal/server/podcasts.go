@@ -128,10 +128,14 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		items := []map[string]any{}
 		for _, e := range l.Entries {
+			if e.MembersOnly && !s.yt.HasCookies() {
+				continue
+			}
 			items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": e.UploadDate, "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": true})
 		}
 		existing, _ := s.store.FindPodcastByFeed(r.Context(), me(r), norm)
-		out := map[string]any{"kind": "youtube", "youtube_kind": kind, "url": norm, "title": l.Title, "author": l.Uploader, "image": l.Thumbnail, "description": l.Description, "episodes": items}
+		out := map[string]any{"kind": "youtube", "youtube_kind": kind, "url": norm, "title": l.Title, "author": l.Uploader, "image": l.Thumbnail, "description": l.Description, "episodes": items,
+			"next": len(l.Entries), "more": len(l.Entries) >= 30}
 		if existing != nil {
 			out["subscribed_id"] = existing.ID
 		}

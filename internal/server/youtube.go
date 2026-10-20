@@ -255,3 +255,33 @@ func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": out})
 }
+
+// handleListing pages through a YouTube channel or playlist for the Videos
+// window: ?url=&offset=&limit= → {episodes, more}.
+func (s *Server) handleListing(w http.ResponseWriter, r *http.Request) {
+	kind, norm, _, err := ytdlp.Classify(r.URL.Query().Get("url"))
+	if err != nil || kind == ytdlp.KindVideo {
+		writeErr(w, http.StatusBadRequest, "a channel or playlist URL is required")
+		return
+	}
+	offset := clampInt(queryInt(r, "offset"), 0, 5000)
+	limit := clampInt(queryInt(r, "limit"), 0, 50)
+	if limit == 0 {
+		limit = 30
+	}
+	l, err := s.yt.IndexPage(r.Context(), norm, offset, limit)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	members := s.yt.HasCookies()
+	items := []map[string]any{}
+	for _, e := range l.Entries {
+		if e.MembersOnly && !members {
+			continue
+		}
+		items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": e.UploadDate, "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": !e.Live})
+	}
+	// a full page means there may be more; members-only ones count as seen
+	writeJSON(w, http.StatusOK, map[string]any{"episodes": items, "more": len(l.Entries) >= limit, "next": offset + len(l.Entries)})
+}

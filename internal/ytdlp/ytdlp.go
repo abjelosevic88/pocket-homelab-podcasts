@@ -234,12 +234,18 @@ func bestThumb(th []rawThumb, prefer string) string {
 // Index lists the newest limit entries of a channel or playlist without
 // visiting each video (fast: one request).
 func (r *Runner) Index(ctx context.Context, u string, limit int) (*Listing, error) {
-	if limit <= 0 {
-		limit = 30
+	return r.IndexPage(ctx, u, 0, limit)
+}
+
+// IndexPage lists count entries starting after the first offset ones (for
+// paging through a long channel or playlist).
+func (r *Runner) IndexPage(ctx context.Context, u string, offset, count int) (*Listing, error) {
+	if count <= 0 {
+		count = 30
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	args := append(r.common(), "--flat-playlist", "-J", "--playlist-end", fmt.Sprint(limit), "--extractor-args", "youtubetab:approximate_date", u)
+	args := append(r.common(), "--flat-playlist", "-J", "--playlist-start", fmt.Sprint(offset+1), "--playlist-end", fmt.Sprint(offset+count), "--extractor-args", "youtubetab:approximate_date", u)
 	c := r.cmd(ctx, args...)
 	var stderr bytes.Buffer
 	c.Stderr = &stderr

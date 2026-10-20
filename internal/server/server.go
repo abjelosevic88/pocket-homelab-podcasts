@@ -262,6 +262,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/youtube/video", s.handleAddVideo)
 			r.Post("/picks", s.handlePickEpisode)
 			r.Get("/youtube/search", s.handleSearchChannels)
+			r.Get("/youtube/listing", s.handleListing)
 
 			r.Get("/users", s.handleListUsers)
 			r.Post("/users", s.handleCreateUser)

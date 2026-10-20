@@ -641,3 +641,4 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .modal .pv { margin-top: 0; }
 @media (max-width: 600px) { .peek-head { flex-wrap: wrap; } .peek-head > .row { width: 100%; justify-content: flex-end; } }
 @media (max-width: 600px) { .pv-hint { display: none; } }
+.pv-more { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 0 4px; color: var(--muted); font-size: 13px; min-height: 40px; }

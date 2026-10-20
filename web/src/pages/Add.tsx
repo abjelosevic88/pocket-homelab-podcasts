@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
@@ -188,12 +188,21 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
 
 /** Episodes of a looked-up show: thumbnail rows that expand in place with
  *  the notes, a listen sample and "Get" (one episode into Picks). */
-function PreviewEpisodes({ preview, picked, onPick }: { preview: Preview; picked: Record<string, 'busy' | 'done'>; onPick: (guid: string, title: string) => void }) {
+interface InfiniteList { more: boolean; loading: boolean; error: string; onMore: () => void }
+
+function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Preview; picked: Record<string, 'busy' | 'done'>; onPick: (guid: string, title: string) => void; infinite?: InfiniteList }) {
+  const sentinel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!infinite || !infinite.more || infinite.loading || infinite.error || !sentinel.current) return
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) infinite.onMore() }, { rootMargin: '400px 0px' })
+    io.observe(sentinel.current)
+    return () => io.disconnect()
+  }, [infinite])
   const [open, setOpen] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
   const [q, setQ] = useState('')
   const eps = preview.episodes || []
-  const list = eps.filter(e => !q || e.title.toLowerCase().includes(q.toLowerCase())).slice(0, showAll || q ? eps.length : 8)
+  const list = eps.filter(e => !q || e.title.toLowerCase().includes(q.toLowerCase())).slice(0, infinite || showAll || q ? eps.length : 8)
   const yt = preview.kind === 'youtube'
   const dateOf = (d: string) => !d ? '' : d.length === 8 ? fmtDate(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`) : fmtDate(d)
   const key = (e: PreviewEpisode, i: number) => e.guid || String(i)
@@ -234,7 +243,15 @@ function PreviewEpisodes({ preview, picked, onPick }: { preview: Preview; picked
           )
         })}
       </ul>
-      {!showAll && !q && eps.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {eps.length - 8} more{preview.episode_count && preview.episode_count > eps.length ? ` (of ${preview.episode_count})` : ''}</button>}
+      {!infinite && !showAll && !q && eps.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {eps.length - 8} more{preview.episode_count && preview.episode_count > eps.length ? ` (of ${preview.episode_count})` : ''}</button>}
+      {infinite && !q && (
+        <div ref={sentinel} className="pv-more">
+          {infinite.error ? <><span className="bad small">{infinite.error}</span> <button className="btn ghost sm" onClick={infinite.onMore}>Try again</button></>
+            : infinite.loading ? <><span className="spinner sm" /> Loading older videos…</>
+            : infinite.more ? <button className="btn ghost sm" onClick={infinite.onMore}>Load more</button>
+            : <span className="muted small">That's all {eps.length} videos.</span>}
+        </div>
+      )}
     </div>
   )
 }
@@ -376,6 +393,19 @@ function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: { url: 
   const { toast } = useToast()
   const { data: preview, loading, error } = useAsync(() => api.post<Preview>(`${V1}/preview`, { url }), [url])
   const [picked, setPicked] = useState<Record<string, 'busy' | 'done'>>({})
+  const [extra, setExtra] = useState<PreviewEpisode[]>([])
+  const [page, setPage] = useState<{ next: number; more: boolean; loading: boolean; error: string } | null>(null)
+  useEffect(() => { if (preview) { setExtra([]); setPage({ next: preview.next ?? 30, more: preview.more ?? false, loading: false, error: '' }) } }, [preview])
+  const loadMore = useCallback(async () => {
+    if (!page || page.loading || !page.more) return
+    setPage(p => p && { ...p, loading: true, error: '' })
+    try {
+      const r = await api.get<{ episodes: PreviewEpisode[]; more: boolean; next: number }>(`${V1}/youtube/listing?url=${encodeURIComponent(url)}&offset=${page.next}&limit=30`)
+      setExtra(x => { const seen = new Set([...(preview?.episodes || []), ...x].map(e => e.guid)); return [...x, ...r.episodes.filter(e => !seen.has(e.guid))] })
+      setPage({ next: r.next, more: r.more, loading: false, error: '' })
+    } catch (e) { setPage(p => p && { ...p, loading: false, error: (e as Error).message }) }
+  }, [page, url, preview])
+  const all = preview ? { ...preview, episodes: [...(preview.episodes || []), ...extra] } : null
   const [sub, setSub] = useState<number | 'busy' | undefined>(subscribedID)
   const pick = async (guid: string, t: string) => {
     setPicked(p => ({ ...p, [guid]: 'busy' }))
@@ -409,8 +439,8 @@ function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: { url: 
                 : <button className="btn primary sm" onClick={subscribe} disabled={sub === 'busy'} title="New uploads will download automatically">{sub === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
             </div>
           </div>
-          {preview.episodes && preview.episodes.length > 0
-            ? <PreviewEpisodes preview={preview} picked={picked} onPick={pick} />
+          {all && all.episodes.length > 0
+            ? <PreviewEpisodes preview={all} picked={picked} onPick={pick} infinite={page ? { more: page.more, loading: page.loading, error: page.error, onMore: loadMore } : undefined} />
             : <p className="muted">No videos found.</p>}
         </div>
       )}
