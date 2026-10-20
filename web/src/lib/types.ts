@@ -73,3 +73,5 @@ export interface Stats {
 export interface Home { continue: Episode[]; queue: Episode[]; fresh: Episode[]; recent: Episode[]; podcasts: Podcast[]; dashboard: Dashboard }
 
 export interface PreviewEpisode { title: string; duration: number; date: string; guid?: string; description?: string; image?: string; has_audio?: boolean; audio?: string; link?: string; season?: number; episode?: number }
+
+export interface YTChannel { id: string; title: string; handle: string; url: string; followers: number; description: string; thumbnail: string; subscribed_id?: number }

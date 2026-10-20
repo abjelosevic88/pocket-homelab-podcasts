@@ -2,7 +2,7 @@
 
 A YouTube subscription is a channel or playlist whose videos become audio episodes on this box.
 
-**Adding.** Paste `https://www.youtube.com/@Fireship`, `/channel/UC…`, a playlist link (unlisted ones work — keep a "Watch later" playlist you control) or `@handle`. Channels are read through their `/videos` tab so only uploads appear (no Shorts tab, no live tab; Shorts are still uploads, so use the minimum length to keep them out). A single video goes into your "Picks" show (where single episodes picked from podcast feeds land too).
+**Adding.** Search channels by name on Add → YouTube (the Search tab lists the best matches too) and press **+ Subscribe**, or paste `https://www.youtube.com/@Fireship`, `/channel/UC…`, a playlist link (unlisted ones work — keep a "Watch later" playlist you control) or `@handle`. Channels are read through their `/videos` tab so only uploads appear (no Shorts tab, no live tab; Shorts are still uploads, so use the minimum length to keep them out). A single video goes into your "Picks" show (where single episodes picked from podcast feeds land too).
 
 **Indexing.** `yt-dlp --flat-playlist -J --playlist-end N` lists the newest N videos (`YOUTUBE_INDEX_LIMIT`, 30) in about a second, with approximate upload dates. Videos that fail the filters (minimum length, title regex, live) are not even listed. Refresh runs on the same schedule as podcasts.
 

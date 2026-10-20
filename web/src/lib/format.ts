@@ -102,3 +102,6 @@ export const SB_CATEGORIES: { id: string; label: string; hint: string }[] = [
   { id: 'music_offtopic', label: 'Non-music', hint: 'In music videos only' },
   { id: 'filler', label: 'Filler', hint: 'Tangents and jokes (aggressive)' },
 ]
+
+/** 4310000 → "4.3M". */
+export function compact(n: number): string { return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n) }

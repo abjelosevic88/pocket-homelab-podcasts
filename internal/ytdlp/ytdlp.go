@@ -410,6 +410,71 @@ func parseInfo(b []byte) Info {
 	return in
 }
 
+// Channel is a YouTube channel found by a search.
+type Channel struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Handle      string `json:"handle"`
+	URL         string `json:"url"`
+	Followers   int64  `json:"followers"`
+	Description string `json:"description"`
+	Thumbnail   string `json:"thumbnail"`
+}
+
+var avatarSize = regexp.MustCompile(`=s\d+-`)
+
+// SearchChannels asks YouTube's search for channels (one request, ~1 s).
+func (r *Runner) SearchChannels(ctx context.Context, q string, limit int) ([]Channel, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	// sp=EgIQAg== is YouTube's own "type: channel" search filter
+	u := "https://www.youtube.com/results?search_query=" + url.QueryEscape(q) + "&sp=EgIQAg%253D%253D"
+	args := append(r.common(), "--flat-playlist", "-J", "--playlist-end", fmt.Sprint(limit), u)
+	c := r.cmd(ctx, args...)
+	var stderr bytes.Buffer
+	c.Stderr = &stderr
+	out, err := c.Output()
+	if err != nil {
+		return nil, fmt.Errorf("yt-dlp: %s", friendly(stderr.String(), err))
+	}
+	var raw struct {
+		Entries []struct {
+			ID          string     `json:"id"`
+			Title       string     `json:"title"`
+			Channel     string     `json:"channel"`
+			ChannelID   string     `json:"channel_id"`
+			ChannelURL  string     `json:"channel_url"`
+			UploaderID  string     `json:"uploader_id"`
+			Followers   int64      `json:"channel_follower_count"`
+			Description string     `json:"description"`
+			Thumbnails  []rawThumb `json:"thumbnails"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("yt-dlp: unreadable search results: %w", err)
+	}
+	res := []Channel{}
+	for _, e := range raw.Entries {
+		id := firstNonEmpty(e.ChannelID, e.ID)
+		if !strings.HasPrefix(id, "UC") {
+			continue
+		}
+		ch := Channel{ID: id, Title: firstNonEmpty(e.Title, e.Channel), Handle: e.UploaderID, Followers: e.Followers, Description: e.Description,
+			URL: firstNonEmpty(e.ChannelURL, "https://www.youtube.com/channel/"+id)}
+		if t := bestThumb(e.Thumbnails, ""); t != "" {
+			if strings.HasPrefix(t, "//") {
+				t = "https:" + t
+			}
+			ch.Thumbnail = avatarSize.ReplaceAllString(t, "=s240-")
+		}
+		res = append(res, ch)
+	}
+	return res, nil
+}
+
 // VideoInfo fetches one video's metadata without downloading.
 func (r *Runner) VideoInfo(ctx context.Context, videoURL string) (*Info, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)

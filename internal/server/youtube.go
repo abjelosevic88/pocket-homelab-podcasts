@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/feed"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/store"
@@ -141,4 +144,67 @@ func (s *Server) handlePickEpisode(w http.ResponseWriter, r *http.Request) {
 	s.store.AddActivity(ctx, me(r), "pick", "Picked “"+item.Title+"” from "+res.Feed.Title, p.ID, e.ID)
 	ep, _ := s.store.GetEpisode(ctx, me(r), e.ID)
 	writeJSON(w, http.StatusCreated, s.episodeDetail(r, ep))
+}
+
+type channelSearch struct {
+	at  time.Time
+	res []ytdlp.Channel
+}
+
+var (
+	channelCacheMu sync.Mutex
+	channelCache   = map[string]channelSearch{}
+)
+
+// channelJSON is a search result with the caller's subscription, if any.
+type channelJSON struct {
+	ytdlp.Channel
+	SubscribedID int64 `json:"subscribed_id,omitempty"`
+}
+
+// handleSearchChannels finds YouTube channels by name (cached ten minutes).
+func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) < 2 {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []channelJSON{}})
+		return
+	}
+	if !s.ytAvailable() {
+		writeErr(w, http.StatusBadRequest, "yt-dlp is not available on this box")
+		return
+	}
+	limit := clampInt(queryInt(r, "limit"), 0, 30)
+	if limit == 0 {
+		limit = 12
+	}
+	key := strings.ToLower(q) + "|" + strconv.Itoa(limit)
+	channelCacheMu.Lock()
+	c, ok := channelCache[key]
+	channelCacheMu.Unlock()
+	if !ok || time.Since(c.at) > 10*time.Minute {
+		res, err := s.yt.SearchChannels(r.Context(), q, limit)
+		if err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		c = channelSearch{at: time.Now(), res: res}
+		channelCacheMu.Lock()
+		if len(channelCache) > 200 {
+			channelCache = map[string]channelSearch{}
+		}
+		channelCache[key] = c
+		channelCacheMu.Unlock()
+	}
+	pods, _ := s.store.ListPodcasts(r.Context(), me(r), "", store.KindYouTube, "")
+	byID := map[string]int64{}
+	for _, p := range pods {
+		if p.YouTubeID != "" {
+			byID[p.YouTubeID] = p.ID
+		}
+	}
+	out := make([]channelJSON, 0, len(c.res))
+	for _, ch := range c.res {
+		out = append(out, channelJSON{Channel: ch, SubscribedID: byID[ch.ID]})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": out})
 }

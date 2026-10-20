@@ -15,6 +15,7 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 - `POST /podcasts/{id}/favorite {favorite}` · `POST /podcasts/{id}/played {played}` · `POST /podcasts/{id}/download {count}` · `DELETE /podcasts/{id}/files?played=1`
 - `GET /podcasts/{id}/episodes?…` (same filters as `/episodes`)
 - `GET|POST|DELETE /podcasts/{id}/artwork` (POST: multipart `file` or JSON `{url}`)
+- `GET /youtube/search?q=&limit=` → YouTube channels `{id, title, handle, url, followers, description, thumbnail, subscribed_id?}` (yt-dlp, cached 10 min); subscribe with `POST /podcasts {url}`.
 - `POST /youtube/video {url}` → downloads one video into your "Picks" show.
 - `POST /picks {feed_url, guid|title, download?}` → one episode of any feed into your "Picks" show (no subscription), downloaded unless `download: false`. `guid` comes from `/preview`.
 

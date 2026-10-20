@@ -548,3 +548,7 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .pill .spinner.sm { vertical-align: -1px; margin-right: 4px; }
 .dl-btn.done { color: var(--green-ink) !important; background: var(--success-soft) !important; font-weight: 700; }
 .dl-btn.failed { color: var(--danger) !important; }
+
+.art.round { border-radius: 50% !important; }
+.yt-head { display: flex; align-items: baseline; gap: 8px; font-size: 16px; margin-bottom: 10px; }
+.yt-dot { display: inline-grid; place-items: center; width: 22px; height: 16px; border-radius: 5px; background: #ff0000; color: #fff; font-size: 9px; align-self: center; }

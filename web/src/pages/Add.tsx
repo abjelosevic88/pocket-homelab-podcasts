@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { Podcast, Preview, PreviewEpisode, SearchResult } from '../lib/types'
+import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel } from '../lib/types'
 import { safeHTML } from '../components/Player'
 import { Card, Empty, Field, Loading, PageHeader, Segmented, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
 import { Artwork } from '../components/Artwork'
-import { fmtDate, fmtDur } from '../lib/format'
+import { compact, fmtDate, fmtDur } from '../lib/format'
 
 type Tab = 'search' | 'url' | 'youtube' | 'trending'
 
@@ -25,7 +25,7 @@ export default function Add() {
       <div className="mt">
         {tab === 'search' && <Search />}
         {tab === 'url' && <ByURL kind="rss" />}
-        {tab === 'youtube' && <ByURL kind="youtube" />}
+        {tab === 'youtube' && <><ChannelSearch /><ByURL kind="youtube" /></>}
         {tab === 'trending' && <Trending />}
       </div>
     </>
@@ -46,6 +46,7 @@ function Search() {
       {data?.warnings?.map(w => <div key={w} className="callout danger small mb">{w}</div>)}
       {data && data.results.length === 0 && <Empty title="Nothing found">Try fewer words, or paste the feed URL.</Empty>}
       {data && <Results results={data.results} />}
+      {dq.trim().length >= 2 && settings?.yt_dlp && <YouTubeMatches q={dq} />}
     </>
   )
 }
@@ -102,7 +103,8 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
   }
   const look = async (e: React.FormEvent) => { e.preventDefault(); lookup(url) }
   const spURL = sp.get('url') || ''
-  useEffect(() => { if (spURL) { setUrl(spURL); lookup(spURL) } }, [spURL]) // eslint-disable-line react-hooks/exhaustive-deps
+  const top = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (spURL) { setUrl(spURL); lookup(spURL); setTimeout(() => top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) } }, [spURL]) // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (guid: string, title: string) => {
     if (!preview) return
     setPicked(p => ({ ...p, [guid]: 'busy' }))
@@ -119,7 +121,7 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
   }
   const yt = kind === 'youtube'
   return (
-    <div className="two-col">
+    <div className="two-col" ref={top} style={{ scrollMarginTop: 16 }}>
       <div className="grid" style={{ gap: 16 }}>
         <Card title={yt ? 'YouTube channel, playlist or video' : 'Feed URL'}>
           <form onSubmit={look} className="grid" style={{ gap: 12 }}>
@@ -234,5 +236,73 @@ function PreviewEpisodes({ preview, picked, onPick }: { preview: Preview; picked
       </ul>
       {!showAll && !q && eps.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {eps.length - 8} more{preview.episode_count && preview.episode_count > eps.length ? ` (of ${preview.episode_count})` : ''}</button>}
     </div>
+  )
+}
+
+/** YouTube channel search: one click subscribes, "Videos" looks first. */
+function ChannelSearch() {
+  const [sp] = useSearchParams()
+  const { settings } = useApp()
+  const [q, setQ] = useState(sp.get('q') || '')
+  const dq = useDebounce(q, 450)
+  const { data, loading, error } = useAsync(async () => dq.trim().length < 2 ? null : api.get<{ results: YTChannel[] }>(`${V1}/youtube/search?q=${encodeURIComponent(dq)}&limit=12`), [dq])
+  if (!settings?.yt_dlp) return null
+  return (
+    <div className="mb">
+      <div className="search-bar mb"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search YouTube channels…" autoFocus={!sp.get('url')} />{loading && dq.trim().length >= 2 && <span className="spinner" />}</div>
+      {error && <div className="callout danger small mb">{error}</div>}
+      {data && data.results.length === 0 && <p className="muted">No channels found.</p>}
+      {data && data.results.length > 0 && <ChannelResults results={data.results} />}
+      {!data && <p className="muted small">Search by name, or paste a channel, playlist or video link below.</p>}
+    </div>
+  )
+}
+
+/** The best YouTube channel matches under the podcast search results. */
+function YouTubeMatches({ q }: { q: string }) {
+  const { data, loading } = useAsync(() => api.get<{ results: YTChannel[] }>(`${V1}/youtube/search?q=${encodeURIComponent(q)}&limit=12`), [q])
+  if (loading && !data) return <p className="muted small mt"><span className="spinner sm" /> Looking on YouTube…</p>
+  if (!data || data.results.length === 0) return null
+  return (
+    <section className="mt">
+      <h2 className="yt-head"><span className="yt-dot">▶</span> YouTube channels <Link className="muted small" to={`/add?tab=youtube&q=${encodeURIComponent(q)}`}>all {data.results.length} →</Link></h2>
+      <ChannelResults results={data.results.slice(0, 4)} />
+    </section>
+  )
+}
+
+function ChannelResults({ results }: { results: YTChannel[] }) {
+  const { toast } = useToast()
+  const [subs, setSubs] = useState<Record<string, number | 'busy'>>({})
+  const subscribe = async (c: YTChannel) => {
+    setSubs(s => ({ ...s, [c.id]: 'busy' }))
+    try {
+      const p = await api.post<Podcast>(`${V1}/podcasts`, { url: c.url })
+      setSubs(s => ({ ...s, [c.id]: p.id }))
+      toast(`Subscribed to ${p.title} — the newest videos are downloading`)
+    } catch (e) { setSubs(s => { const n = { ...s }; delete n[c.id]; return n }); toast((e as Error).message, 'err') }
+  }
+  return (
+    <ul className="results">
+      {results.map(c => {
+        const sub = subs[c.id] ?? c.subscribed_id
+        return (
+          <li key={c.id} className="result">
+            <Artwork src={c.thumbnail} title={c.title} size="sm" className="round" />
+            <div className="info">
+              <div className="nm">{c.title}</div>
+              <div className="meta">{[c.handle, c.followers ? `${compact(c.followers)} subscribers` : ''].filter(Boolean).join(' · ')}</div>
+              {c.description && <div className="muted small clamp2">{c.description}</div>}
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+              <Link className="btn sm" to={`/add?tab=youtube&url=${encodeURIComponent(c.url)}`} title="See the latest videos first">Videos</Link>
+              {typeof sub === 'number'
+                ? <Link className="btn sm" to={`/podcasts/${sub}`}>✓ Following</Link>
+                : <button className="btn primary sm" onClick={() => subscribe(c)} disabled={sub === 'busy'} title="New uploads will download automatically">{sub === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
+            </div>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
