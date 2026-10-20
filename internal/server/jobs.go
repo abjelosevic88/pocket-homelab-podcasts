@@ -468,8 +468,23 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 	s.log.Info("downloaded", "podcast", p.Title, "episode", e.Title, "mb", bytes>>20)
 }
 
+// permanentFailure recognises errors a retry cannot fix (members-only,
+// private, removed videos, a gone enclosure) so they are not retried.
+func permanentFailure(err error) bool {
+	m := strings.ToLower(err.Error())
+	for _, k := range []string{"members-only", "members only", "private video", "video unavailable", "has been removed", "no longer available", "http 404", "http 410", "http 403", "sign in to confirm your age", "age-restricted"} {
+		if strings.Contains(m, k) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) downloadFailed(ctx context.Context, p *store.Podcast, e *store.Episode, err error) {
 	_ = s.store.SetDownloadState(ctx, e.ID, store.DownloadFailed, err.Error())
+	if permanentFailure(err) {
+		_ = s.store.GiveUpDownload(ctx, e.ID)
+	}
 	s.store.AddActivity(ctx, p.UserID, "error", fmt.Sprintf("Download of “%s” failed: %s", e.Title, err.Error()), p.ID, e.ID)
 	s.log.Warn("download failed", "episode", e.Title, "err", err)
 }

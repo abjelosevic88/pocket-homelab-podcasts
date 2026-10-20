@@ -65,7 +65,7 @@ def main():
             p["feed_url"] = site  # Pocket Podcasts resolves @handles and playlists itself
             p["pub_date_mode"] = "downloaded"
             p["min_duration"] = 120
-            p["retention_days"] = 7
+            p["retention_days"] = 90 if "list=" in site else 7  # a playlist you curate keeps longer than a channel firehose
         out["podcasts"].append(p)
         by_id[pid] = p
 

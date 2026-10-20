@@ -275,6 +275,13 @@ func (s *Store) ClearEpisodeFile(ctx context.Context, id int64, state string) er
 	return err
 }
 
+// GiveUpDownload stops the hourly retries of a failed download (a person can
+// still queue it again by hand).
+func (s *Store) GiveUpDownload(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET download_tries = 99 WHERE id = ? AND download = 'failed'`, id)
+	return err
+}
+
 // QueueDownload marks an episode for the download worker (idempotent).
 func (s *Store) QueueDownload(ctx context.Context, id int64) error {
 	_, err := s.DB.ExecContext(ctx, `UPDATE episodes SET download = 'queued', download_error = '' WHERE id = ? AND download IN ('none', 'failed', 'culled')`, id)
