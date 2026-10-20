@@ -196,6 +196,15 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if e.FilePath == "" || e.Download != store.DownloadDone || !fileExists(filepath.Join(s.cfg.MediaDir, filepath.FromSlash(e.FilePath))) {
+		if r.Method == http.MethodHead {
+			// an availability check (the iPhone app sends one per episode): a GET would fetch
+			// it, so say it is there without downloading anything
+			if t := firstNonEmpty(e.FileType, e.EnclosureType); t != "" {
+				w.Header().Set("Content-Type", t)
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		// not on the server yet: fetch it now and answer with the file when it is there
 		if e, err = s.ensureFile(r.Context(), e); err != nil {
 			writeErr(w, http.StatusBadGateway, "could not get the audio: "+err.Error())

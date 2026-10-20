@@ -232,6 +232,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/episodes/{id}", s.handleGetEpisode)
 			r.Delete("/episodes/{id}", s.handleDeleteEpisode)
 			r.Get("/episodes/{id}/stream", s.handleStream)
+			r.Head("/episodes/{id}/stream", s.handleStream)
 			r.Get("/episodes/{id}/artwork", s.handleEpisodeArtwork)
 			r.Post("/episodes/{id}/progress", s.handleProgress)
 			r.Post("/episodes/{id}/played", s.handleMarkPlayed)

@@ -66,7 +66,7 @@ func TestStrictlyPerUser(t *testing.T) {
 		{"GET", "/api/v1/podcasts/" + pid + "/episodes", ""}, {"POST", "/api/v1/podcasts/" + pid + "/refresh", ""},
 		{"GET", "/api/v1/episodes/" + eid, ""}, {"POST", "/api/v1/episodes/" + eid + "/progress", `{"position":5,"listened":5}`},
 		{"POST", "/api/v1/episodes/" + eid + "/queue", ""}, {"POST", "/api/v1/episodes/" + eid + "/save", ""}, {"POST", "/api/v1/episodes/" + eid + "/played", ""},
-		{"GET", "/api/v1/episodes/" + eid + "/stream", ""}, {"POST", "/api/v1/episodes/" + eid + "/download", ""}, {"DELETE", "/api/v1/episodes/" + eid, ""},
+		{"GET", "/api/v1/episodes/" + eid + "/stream", ""}, {"HEAD", "/api/v1/episodes/" + eid + "/stream", ""}, {"POST", "/api/v1/episodes/" + eid + "/download", ""}, {"DELETE", "/api/v1/episodes/" + eid, ""},
 		{"GET", "/api/v1/playlists/" + itoa(pl.ID), ""}, {"DELETE", "/api/v1/playlists/" + itoa(pl.ID), ""},
 	} {
 		if code := do(bTok, c.method, c.path, c.body); code != 404 {
@@ -75,6 +75,13 @@ func TestStrictlyPerUser(t *testing.T) {
 		if code := do(aTok, "GET", "/api/v1/podcasts/"+pid, ""); code != 200 {
 			t.Fatalf("alice lost her podcast: %d", code)
 		}
+	}
+	// an availability check answers without fetching the file
+	if code := do(aTok, "HEAD", "/api/v1/episodes/"+eid+"/stream", ""); code != 200 {
+		t.Errorf("alice HEAD stream → %d, want 200", code)
+	}
+	if got, _ := st.GetEpisode(ctx, alice.ID, e.ID); got == nil || got.Download != store.DownloadNone {
+		t.Errorf("HEAD started a download: %+v", got)
 	}
 	if code := do(bTok, "GET", "/api/v1/backup", ""); code != 403 {
 		t.Errorf("member backup → %d, want 403", code)
