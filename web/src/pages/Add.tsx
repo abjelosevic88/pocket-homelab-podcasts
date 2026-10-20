@@ -12,6 +12,8 @@ type Tab = 'search' | 'url' | 'youtube' | 'trending'
 export default function Add() {
   const [sp] = useSearchParams()
   const [tab, setTab] = useState<Tab>((sp.get('tab') as Tab) || 'search')
+  // links like /add?tab=url&url=… land on this same page: follow the query string
+  useEffect(() => { const t = sp.get('tab') as Tab | null; if (t) setTab(t) }, [sp])
   const { settings } = useApp()
   const tabs: { id: Tab; label: string }[] = [{ id: 'search', label: 'Search' }, { id: 'url', label: 'Feed URL' }, { id: 'youtube', label: 'YouTube' }]
   if (settings?.podcastindex_key || settings?.podcastindex_env) tabs.push({ id: 'trending', label: 'Trending' })
@@ -100,7 +102,8 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
     try { setPreview(await api.post<Preview>(`${V1}/preview`, { url: u })) } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
   }
   const look = async (e: React.FormEvent) => { e.preventDefault(); lookup(url) }
-  useEffect(() => { const u = sp.get('url'); if (u) lookup(u) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const spURL = sp.get('url') || ''
+  useEffect(() => { if (spURL) { setUrl(spURL); lookup(spURL) } }, [spURL]) // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (guid: string, title: string) => {
     if (!preview) return
     setPicked(p => ({ ...p, [guid]: 'busy' }))
