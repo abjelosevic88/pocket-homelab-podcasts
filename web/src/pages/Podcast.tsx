@@ -117,7 +117,10 @@ function PodcastSettings({ p, onClose, onSaved }: { p: PodcastT; onClose: () => 
   const [busy, setBusy] = useState(false)
   const [artURL, setArtURL] = useState('')
   const yt = p.kind === 'youtube'
+  const picks = p.feed_url.startsWith('pocket:')
+  const feedURL = `${settings?.feed_url || ''}${p.id}.xml`
   const set = (k: keyof PodcastT, v: unknown) => setF(x => ({ ...x, [k]: v }))
+  const num = (k: keyof PodcastT) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, Number(e.target.value))
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true)
     try { onSaved(await api.put<PodcastT>(`${V1}/podcasts/${p.id}`, f)); toast('Saved') } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
@@ -129,63 +132,67 @@ function PodcastSettings({ p, onClose, onSaved }: { p: PodcastT; onClose: () => 
     try { onSaved(await api.post<PodcastT>(`${V1}/podcasts/${p.id}/artwork`, { url: artURL })); toast('Artwork replaced') } catch (err) { toast((err as Error).message, 'err') }
   }
   const resetArt = async () => { onSaved(await api.del<PodcastT>(`${V1}/podcasts/${p.id}/artwork`)); toast('Back to the feed artwork') }
+  const copy = (t: string) => { navigator.clipboard?.writeText(t); toast('Copied') }
+  const check = (k: keyof PodcastT, label: string, help?: string) => (
+    <label className="ps-check"><input type="checkbox" checked={Boolean(f[k])} onChange={e => set(k, e.target.checked)} /><span><b>{label}</b>{help && <span className="muted small block">{help}</span>}</span></label>
+  )
   return (
     <Modal title={`Settings — ${p.title}`} onClose={onClose} size="lg">
-      <form onSubmit={save} className="grid" style={{ gap: 18 }}>
-        <div className="two-col">
-          <Card title="Playback">
-            <div className="grid" style={{ gap: 12 }}>
+      <form onSubmit={save} className="ps">
+        <section className="ps-section">
+          <h3>Show</h3>
+          <div className="ps-show">
+            <Artwork src={p.artwork} title={p.title} size="md" />
+            <div className="ps-fields">
               <Field label="Title"><input value={f.title} onChange={e => set('title', e.target.value)} /></Field>
-              <Field label="Playback speed" help={`0 = your default (${settings?.playback_speed || 1}×)`}><input type="number" step={0.05} min={0} max={3} value={f.playback_speed} onChange={e => set('playback_speed', Number(e.target.value))} className="num" /></Field>
-              <div className="two-col tight">
-                <Field label="Skip intro (s)"><input type="number" min={0} value={f.start_skip} onChange={e => set('start_skip', Number(e.target.value))} className="num" /></Field>
-                <Field label="Skip outro (s)"><input type="number" min={0} value={f.end_skip} onChange={e => set('end_skip', Number(e.target.value))} className="num" /></Field>
+              <div className="row wrap" style={{ gap: 8 }}>
+                <label className="btn sm">Upload artwork…<input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && uploadArt(e.target.files[0])} /></label>
+                {p.artwork_file && !picks && <button type="button" className="btn ghost sm" onClick={resetArt}>Use the feed's artwork</button>}
               </div>
-              <Field group label="Auto-play next in queue"><Segmented size="sm" value={f.auto_play_next} onChange={v => set('auto_play_next', v)} options={[{ value: -1, label: 'Default' }, { value: 1, label: 'On' }, { value: 0, label: 'Off' }]} /></Field>
-              <label className="row"><input type="checkbox" checked={f.notify} onChange={e => set('notify', e.target.checked)} style={{ width: 'auto' }} /> Notify me about new episodes</label>
-              {yt && <label className="row"><input type="checkbox" checked={f.sponsorblock} onChange={e => set('sponsorblock', e.target.checked)} style={{ width: 'auto' }} /> Fetch SponsorBlock segments</label>}
+              <div className="ps-inline"><input value={artURL} onChange={e => setArtURL(e.target.value)} placeholder="…or paste an image URL" spellCheck={false} /><button type="button" className="btn sm" onClick={artFromURL} disabled={!artURL}>Use</button></div>
+              <span className="muted small">Square, at least 1400×1400 px, for Apple Podcasts.</span>
             </div>
-          </Card>
-          <Card title={yt ? 'Downloads (YouTube)' : 'Downloads'}>
-            <div className="grid" style={{ gap: 12 }}>
-              {!yt && <label className="row"><input type="checkbox" checked={f.auto_download} onChange={e => set('auto_download', e.target.checked)} style={{ width: 'auto' }} /> Download new episodes automatically</label>}
-              {yt && <Field label="Videos fetched when subscribing" help="Afterwards every new upload is downloaded. Older ones can be fetched by hand."><input type="number" min={0} max={500} value={f.download_limit} onChange={e => set('download_limit', Number(e.target.value))} className="num" /></Field>}
-              <Field label="Keep files for (days)" help="0 = keep until you delete them. Saved and queued episodes are never removed."><input type="number" min={0} value={f.retention_days} onChange={e => set('retention_days', Number(e.target.value))} className="num" /></Field>
-              {yt && <>
-                <Field label="Skip videos shorter than (s)" help="Shorts and clips. 0 = take everything."><input type="number" min={0} value={f.min_duration} onChange={e => set('min_duration', Number(e.target.value))} className="num" /></Field>
-                <Field label="Only titles matching" help="Regular expression, case-insensitive. Empty = all."><input value={f.title_filter} onChange={e => set('title_filter', e.target.value)} placeholder="e.g. ^Podcast|Interview" spellCheck={false} /></Field>
-              </>}
-              {!yt && <Field label="Ignore episodes older than (days)" help="0 = the whole feed."><input type="number" min={0} value={f.feed_cutoff_days} onChange={e => set('feed_cutoff_days', Number(e.target.value))} className="num" /></Field>}
-              <Field label="Check for new episodes every (minutes)" help={`0 = your default (${settings?.refresh_minutes || settings?.refresh_default || 60} min)`}><input type="number" min={0} value={f.refresh_minutes} onChange={e => set('refresh_minutes', Number(e.target.value))} className="num" /></Field>
-            </div>
-          </Card>
-        </div>
-        <div className="two-col">
-          <Card title="Public feed">
-            <div className="grid" style={{ gap: 12 }}>
-              <Field group label="Episode date in the feed" help="Apple Podcasts sorts by this. “Downloaded” puts old videos you add later at the top instead of a year deep.">
-                <Segmented size="sm" value={f.pub_date_mode} onChange={v => set('pub_date_mode', v)} options={[{ value: 'published', label: 'Published' }, { value: 'downloaded', label: 'Downloaded' }]} />
-              </Field>
-              <p className="muted small">Feed URL: <code className="mono">{settings?.feed_url}{p.id}.xml</code></p>
-              {!yt && <Field label="Feed URL"><input value={f.feed_url} onChange={e => set('feed_url', e.target.value)} spellCheck={false} /></Field>}
-              {yt && <p className="muted small">Source: <a href={p.feed_url} target="_blank" rel="noreferrer">{p.feed_url}</a></p>}
-            </div>
-          </Card>
-          <Card title="Artwork">
-            <div className="row" style={{ alignItems: 'flex-start', gap: 14 }}>
-              <Artwork src={p.artwork} title={p.title} size="md" />
-              <div className="grid grow" style={{ gap: 8 }}>
-                <label className="btn">Upload image…<input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && uploadArt(e.target.files[0])} /></label>
-                <div className="row"><input value={artURL} onChange={e => setArtURL(e.target.value)} placeholder="https://… image URL" spellCheck={false} /><button type="button" className="btn" onClick={artFromURL} disabled={!artURL}>Use</button></div>
-                {p.artwork_file && <button type="button" className="btn ghost sm" onClick={resetArt}>Back to the feed's artwork</button>}
-                <p className="muted small" style={{ margin: 0 }}>Apple Podcasts wants square artwork of at least 1400×1400 px.</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-        <div className="form-actions"><span className="muted small" style={{ marginRight: 'auto' }}>Subscribed {fmtDate(p.subscribed_at)}</span><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Save</button></div>
+          </div>
+        </section>
+
+        <section className="ps-section">
+          <h3>Playback</h3>
+          <div className="ps-grid">
+            <Field label="Speed" help={`0 = your default (${settings?.playback_speed || 1}×)`}><input type="number" step={0.05} min={0} max={3} value={f.playback_speed} onChange={num('playback_speed')} className="num" /></Field>
+            <Field label="Skip intro (seconds)"><input type="number" min={0} value={f.start_skip} onChange={num('start_skip')} className="num" /></Field>
+            <Field label="Skip outro (seconds)"><input type="number" min={0} value={f.end_skip} onChange={num('end_skip')} className="num" /></Field>
+            <Field group label="Play the next queued episode"><Segmented size="sm" value={f.auto_play_next} onChange={v => set('auto_play_next', v)} options={[{ value: -1, label: 'Default' }, { value: 1, label: 'On' }, { value: 0, label: 'Off' }]} /></Field>
+          </div>
+          {(yt || p.youtube_kind === 'picks') && check('sponsorblock', 'Fetch SponsorBlock segments', 'Sponsor reads and reminders in YouTube videos are skipped while you listen.')}
+        </section>
+
+        <section className="ps-section">
+          <h3>{picks ? 'Files' : yt ? 'New videos' : 'New episodes'}</h3>
+          {!picks && !yt && check('auto_download', 'Download new episodes to the server', 'They play instantly and stay even if the publisher removes them.')}
+          {!picks && check('notify', 'Notify me about new episodes', 'Through the channel set in Settings → Notifications.')}
+          <div className="ps-grid">
+            {yt && !picks && <Field label="Videos fetched when subscribing" help="Afterwards every new upload."><input type="number" min={0} max={500} value={f.download_limit} onChange={num('download_limit')} className="num" /></Field>}
+            <Field label="Keep files for (days)" help="0 = until you delete them. Saved and queued episodes stay."><input type="number" min={0} value={f.retention_days} onChange={num('retention_days')} className="num" /></Field>
+            {yt && !picks && <Field label="Skip videos shorter than (seconds)" help="Keeps Shorts out. 0 = everything."><input type="number" min={0} value={f.min_duration} onChange={num('min_duration')} className="num" /></Field>}
+            {!yt && !picks && <Field label="Ignore episodes older than (days)" help="0 = the whole feed."><input type="number" min={0} value={f.feed_cutoff_days} onChange={num('feed_cutoff_days')} className="num" /></Field>}
+            {!picks && <Field label="Check every (minutes)" help={`0 = your default (${settings?.refresh_minutes || settings?.refresh_default || 60} min)`}><input type="number" min={0} value={f.refresh_minutes} onChange={num('refresh_minutes')} className="num" /></Field>}
+          </div>
+          {yt && !picks && <Field label="Only titles matching" help="A regular expression, case-insensitive. Empty = all videos."><input value={f.title_filter} onChange={e => set('title_filter', e.target.value)} placeholder="e.g. Podcast|Interview" spellCheck={false} /></Field>}
+        </section>
+
+        <section className="ps-section">
+          <h3>Public feed</h3>
+          <p className="muted small" style={{ margin: 0 }}>Subscribe to this in Apple Podcasts, Overcast or any podcast app.</p>
+          <div className="ps-inline"><code className="ps-url" title={feedURL}>{feedURL}</code><button type="button" className="btn sm" onClick={() => copy(feedURL)}>Copy</button></div>
+          <Field group label="Episode date in the feed" help="“Downloaded” puts old episodes you add later at the top instead of deep in the list.">
+            <Segmented size="sm" value={f.pub_date_mode} onChange={v => set('pub_date_mode', v)} options={[{ value: 'published', label: 'Published' }, { value: 'downloaded', label: 'Downloaded' }]} />
+          </Field>
+          {!picks && !yt && <Field label="Source feed"><input value={f.feed_url} onChange={e => set('feed_url', e.target.value)} spellCheck={false} /></Field>}
+          {!picks && yt && <p className="muted small" style={{ margin: 0 }}>Source: <a href={p.feed_url} target="_blank" rel="noreferrer">{p.feed_url}</a></p>}
+        </section>
+
+        <div className="ps-foot"><span className="muted small">{picks ? 'Your hand-picked episodes' : `Subscribed ${fmtDate(p.subscribed_at)}`}</span><span className="spacer" /><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Save</button></div>
       </form>
     </Modal>
   )
 }
-
