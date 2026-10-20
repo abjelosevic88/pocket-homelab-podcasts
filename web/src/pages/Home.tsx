@@ -6,6 +6,7 @@ import type { Episode, Home as HomeT } from '../lib/types'
 import { Card, Empty, Loading, PageHeader, useAsync, useToast } from '../components/ui'
 import { EpisodeList } from '../components/EpisodeRow'
 import { PodcastCard } from '../components/PodcastCard'
+import { Carousel } from '../components/Carousel'
 
 export default function Home() {
   const { user } = useApp()
@@ -49,7 +50,7 @@ export default function Home() {
       {data.podcasts.length > 0 && (
         <section className="home-section">
           <h2>Podcasts <Link to="/podcasts" className="muted small">all {d.podcasts} →</Link></h2>
-          <div className="pod-strip">{data.podcasts.map(p => <PodcastCard key={p.id} p={p} />)}</div>
+          <Carousel className="pod-strip">{data.podcasts.map(p => <PodcastCard key={p.id} p={p} />)}</Carousel>
         </section>
       )}
       {data.fresh.length > 0 && (

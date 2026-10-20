@@ -270,7 +270,7 @@ a.stat:hover { border-color: var(--accent); text-decoration: none; }
 
 /* ---- podcasts ---- */
 .pod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px 16px; }
-.pod-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 120px; gap: 14px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+.pod-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 120px; gap: 14px; }
 .pod-card { display: flex; flex-direction: column; gap: 3px; color: var(--text); min-width: 0; }
 .pod-card:hover { text-decoration: none; }
 .pod-card:hover .art { box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0,0,0,.15); }
@@ -681,3 +681,18 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
   .cmdk-foot { display: none; }
   .cmdk-scopes { overflow-x: auto; }
 }
+
+/* ---- horizontal rows without a scrollbar ---- */
+.carousel { position: relative; }
+.carousel-track { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding: 0 2px; padding: 4px 2px 6px; overscroll-behavior-x: contain; }
+.carousel-track::-webkit-scrollbar { display: none; }
+.carousel-track > * { scroll-snap-align: start; }
+.carousel.more-right .carousel-track { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent); }
+.carousel.more-left .carousel-track { -webkit-mask-image: linear-gradient(to right, transparent, #000 64px); mask-image: linear-gradient(to right, transparent, #000 64px); }
+.carousel.more-left.more-right .carousel-track { -webkit-mask-image: linear-gradient(to right, transparent, #000 64px, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to right, transparent, #000 64px, #000 calc(100% - 64px), transparent); }
+.carousel-btn { position: absolute; top: 64px; transform: translateY(-50%); width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 22px; line-height: 1; display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.18); opacity: 0; transition: opacity .15s, transform .15s; z-index: 2; padding: 0 0 3px; }
+.carousel-btn.left { left: -6px; } .carousel-btn.right { right: -6px; }
+.carousel:hover .carousel-btn, .carousel-btn:focus-visible { opacity: 1; }
+.carousel-btn:hover { border-color: var(--accent); color: var(--accent-hover); transform: translateY(-50%) scale(1.06); }
+@media (hover: none) { .carousel-btn { display: none; } }
+@media (max-width: 900px) { .carousel-btn { top: 54px; } }
