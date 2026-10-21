@@ -12,8 +12,8 @@ It replaces PinePods for people who want the same ideas with less machinery: no 
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/podcast.png" alt="A YouTube channel as a podcast: episodes with download state, SponsorBlock badges, per-show settings"></td>
-    <td width="50%"><img src="docs/screenshots/player.png" alt="The player: artwork, SponsorBlock on, speed, sleep timer, chapters"></td>
+    <td width="50%"><img src="docs/screenshots/podcast.png" alt="A podcast: its episodes with progress, queue and download state, per-show settings"></td>
+    <td width="50%"><img src="docs/screenshots/player.png" alt="The player: artwork, chapters and notes, skip, speed, sleep timer"></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/add.png" alt="Adding: directory search with Follow or Episodes per result"></td>
