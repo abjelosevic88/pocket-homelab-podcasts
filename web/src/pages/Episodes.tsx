@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import type { Episode, Podcast } from '../lib/types'
-import { Empty, Loading, PageHeader, Segmented, useAsync, useDebounce, usePopover } from '../components/ui'
+import { Empty, Loading, MenuButton, PageHeader, Segmented, useAsync, useDebounce, usePopover } from '../components/ui'
+import { Icon } from '../components/icons'
 import { EpisodeList } from '../components/EpisodeRow'
 import { Select } from '../components/Select'
 
@@ -18,8 +19,6 @@ const STATUSES = [
   { value: 'partial', label: 'In progress' },
   { value: 'played', label: 'Played' },
 ]
-const SortIcon = () => <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden><path d="M5 3v10M5 13l-2.5-2.5M5 13l2.5-2.5M11 13V3M11 3L8.5 5.5M11 3l2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-const FilterIcon = () => <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden><path d="M2.5 3.5h11L9.2 8.6v3.6l-2.4 1.3V8.6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
 const DAYS: Record<string, string> = { '7': 'Last 7 days', '30': 'Last 30 days' }
 const KINDS: Record<string, string> = { rss: 'Podcasts only', youtube: 'YouTube only' }
 
@@ -36,7 +35,6 @@ export default function Episodes() {
   const dq = useDebounce(q)
   const [page, setPage] = useState(0)
   const LIMIT = 50
-  const sortPop = usePopover()
   const filterPop = usePopover()
   const pods = useAsync(() => api.get<Podcast[]>(`${V1}/podcasts?sort=title`), [])
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }); setPage(0) }
@@ -60,18 +58,13 @@ export default function Episodes() {
       <PageHeader title="Episodes" sub={data ? `${data.total.toLocaleString()} episode${data.total === 1 ? '' : 's'}${chips.length || status || dq ? ' match' : ''}` : undefined} />
       <div className="epf">
         <div className="epf-top">
-          <label className="epf-search"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search titles and show notes…" />{q && <button className="epf-x" onClick={() => setQ('')} aria-label="Clear search">✕</button>}</label>
-          <div className="menu-wrap" ref={sortPop.ref}>
-            <button className="btn epf-btn" onClick={() => sortPop.setOpen(o => !o)} aria-haspopup="menu" aria-expanded={sortPop.open}><SortIcon /> {sortLabel}</button>
-            {sortPop.open && (
-              <div className="menu" role="menu">
-                {SORTS.map(s => <button key={s.value} role="menuitemradio" aria-checked={s.value === sort} className={s.value === sort ? 'cur' : ''} onClick={() => { set('sort', s.value); sortPop.setOpen(false) }}>{s.value === sort ? '✓ ' : ''}{s.label}</button>)}
-              </div>
-            )}
+          <label className="epf-search"><Icon name="search" size={16} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search titles and show notes…" aria-label="Search episodes" />{q && <button type="button" className="epf-x" onClick={() => setQ('')} aria-label="Clear search"><Icon name="x" size={14} /></button>}</label>
+          <div className="menu-wrap">
+            <MenuButton label={`Sort: ${sortLabel}`} className="btn epf-btn" align="right" width={190} items={SORTS.map(s => ({ label: s.label, checked: s.value === sort, onSelect: () => set('sort', s.value) }))}><Icon name="sort" size={15} /> {sortLabel}</MenuButton>
           </div>
           <div className="menu-wrap" ref={filterPop.ref}>
-            <button className={`btn epf-btn ${chips.length ? 'on' : ''}`} onClick={() => filterPop.setOpen(o => !o)} aria-haspopup="dialog" aria-expanded={filterPop.open}>
-              <FilterIcon /> Filters{chips.length > 0 && <span className="epf-count">{chips.length}</span>}
+            <button type="button" className={`btn epf-btn ${chips.length ? 'on' : ''}`} onClick={() => filterPop.setOpen(o => !o)} aria-haspopup="dialog" aria-expanded={filterPop.open}>
+              <Icon name="filter" size={15} /> Filters{chips.length > 0 && <span className="epf-count">{chips.length}</span>}
             </button>
             {filterPop.open && (
               <div className="epf-panel" role="dialog" aria-label="Filters">
@@ -93,20 +86,20 @@ export default function Episodes() {
                   <Segmented size="sm" value={downloaded} onChange={v => set('downloaded', v)} options={[{ value: '', label: 'Any' }, { value: '1', label: 'Downloaded' }, { value: '0', label: 'Not downloaded' }]} />
                 </div>
                 <div className="epf-panel-foot">
-                  <button className="btn ghost sm" onClick={clearFilters} disabled={!chips.length}>Clear filters</button>
-                  <button className="btn primary sm" onClick={() => filterPop.setOpen(false)}>Done</button>
+                  <button type="button" className="btn ghost sm" onClick={clearFilters} disabled={!chips.length}>Clear filters</button>
+                  <button type="button" className="btn primary sm" onClick={() => filterPop.setOpen(false)}>Done</button>
                 </div>
               </div>
             )}
           </div>
         </div>
         <div className="epf-tabs" role="tablist">
-          {STATUSES.map(s => <button key={s.value} role="tab" aria-selected={s.value === status} className={s.value === status ? 'active' : ''} onClick={() => set('status', s.value)}>{s.label}</button>)}
+          {STATUSES.map(s => <button key={s.value} type="button" role="tab" aria-selected={s.value === status} className={s.value === status ? 'active' : ''} onClick={() => set('status', s.value)}>{s.label}</button>)}
         </div>
         {chips.length > 0 && (
           <div className="epf-chips">
-            {chips.map(c => <button key={c.key} className="epf-chip" onClick={() => set(c.key, '')} title="Remove this filter">{c.label} <span aria-hidden>✕</span></button>)}
-            <button className="btn ghost sm" onClick={clearFilters}>Clear all</button>
+            {chips.map(c => <button key={c.key} type="button" className="epf-chip" onClick={() => set(c.key, '')} title="Remove this filter">{c.label} <Icon name="x" size={12} /></button>)}
+            <button type="button" className="btn ghost sm" onClick={clearFilters}>Clear all</button>
           </div>
         )}
       </div>
@@ -115,9 +108,9 @@ export default function Episodes() {
           <EpisodeList episodes={data?.episodes || []} onChange={setEps} empty={<Empty title="No episodes">{dq ? 'Nothing matches your search.' : chips.length || status ? 'Nothing here with these filters.' : 'Subscribe to something under Add.'}</Empty>} />
           {data && data.total > LIMIT && (
             <div className="row mt" style={{ justifyContent: 'center' }}>
-              <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Previous</button>
+              <button type="button" className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}><Icon name="chevron-left" size={15} />Previous</button>
               <span className="muted small">{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, data.total)} of {data.total}</span>
-              <button className="btn" disabled={(page + 1) * LIMIT >= data.total} onClick={() => setPage(p => p + 1)}>Next →</button>
+              <button type="button" className="btn" disabled={(page + 1) * LIMIT >= data.total} onClick={() => setPage(p => p + 1)}>Next<Icon name="chevron-right" size={15} /></button>
             </div>
           )}
         </>

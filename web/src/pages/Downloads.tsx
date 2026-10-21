@@ -22,8 +22,8 @@ export default function Downloads() {
           <EpisodeList episodes={data.pending} onChange={eps => setData({ ...data, pending: eps })} compact />
         </Card>
       )}
-      <h2 className="mb-sm">Downloaded</h2>
-      <EpisodeList episodes={data.done} onChange={eps => setData({ ...data, done: eps.filter(e => e.download === 'done') })} compact empty={<Empty title="Nothing downloaded">Episodes you download, auto-downloads and YouTube videos show up here.</Empty>} />
+      <h2 className="section-h">Downloaded</h2>
+      <EpisodeList episodes={data.done} onChange={eps => setData({ ...data, done: eps.filter(e => e.download === 'done') })} compact empty={<Empty title="Nothing downloaded" icon="download">Episodes you download, auto-downloads and YouTube videos show up here.</Empty>} />
     </>
   )
 }

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { usePlayer } from '../lib/player'
-import { useToast } from './ui'
+import { MenuButton, type MenuItem, useToast } from './ui'
+import { Icon } from './icons'
 import { Artwork } from './Artwork'
 import type { Episode } from '../lib/types'
 import { DL_LABEL, fmtDate, fmtDur, left, plain, progressPct } from '../lib/format'
@@ -50,26 +51,18 @@ interface Props {
 export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, dragHandle }: Props) {
   const player = usePlayer()
   const act = useEpisodeActions()
-  const [menu, setMenu] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const isCur = player.isCurrent(ep.id)
   const playing = isCur && player.playing
   const pct = isCur && player.duration ? Math.round((player.time / player.duration) * 100) : progressPct(ep)
   const upd = (e: Episode | null) => onChange?.(e)
-  useEffect(() => {
-    if (!menu) return
-    const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [menu])
   const dl = ep.download
-  const dlIcon = dl === 'done' ? '✓' : dl === 'queued' || dl === 'downloading' ? <span className="spinner sm" /> : dl === 'failed' ? '!' : '↓'
+  const dlIcon = dl === 'done' ? <Icon name="check-circle" size={16} /> : dl === 'queued' || dl === 'downloading' ? <span className="spinner sm" /> : dl === 'failed' ? <Icon name="alert" size={16} /> : <Icon name="download" size={16} />
   const canPlay = Boolean(ep.stream_url) || dl === 'queued' || dl === 'downloading'
   return (
     <div className={`ep-row ${compact ? 'compact' : ''} ${ep.completed ? 'played' : ''} ${isCur ? 'current' : ''}`}>
       {dragHandle}
-      <button className={`play-btn ${playing ? 'on' : ''}`} onClick={() => playing ? player.pause() : player.play(ep)} title={playing ? 'Pause' : canPlay ? 'Play' : 'Download and play'} aria-label={playing ? 'Pause' : 'Play'}>
-        {playing ? '❚❚' : canPlay ? '▶' : '↓'}
+      <button type="button" className={`play-btn ${playing ? 'on' : ''}`} onClick={() => playing ? player.pause() : player.play(ep)} title={playing ? 'Pause' : canPlay ? 'Play' : 'Download and play'} aria-label={playing ? 'Pause' : 'Play'}>
+        <Icon name={playing ? 'pause' : canPlay ? 'play' : 'download'} size={canPlay || playing ? 15 : 16} />
       </button>
       <Link to={`/episodes/${ep.id}`} className="ep-art"><Artwork src={ep.artwork_url || ep.podcast_artwork} title={ep.podcast_title || ep.title} size={compact ? 'xs' : 'sm'} /></Link>
       <div className="ep-info">
@@ -79,7 +72,7 @@ export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, 
           {ep.pub_date && <span>{fmtDate(ep.pub_date)}</span>}
           {ep.duration > 0 && <span>{left(ep) || fmtDur(ep.duration)}</span>}
           {ep.completed && <span className="badge ok-badge">played</span>}
-          {dl !== 'none' && dl !== 'culled' && <span className={`badge ${dl === 'failed' ? 'warn' : dl === 'done' ? 'ok-badge' : ''}`} title={ep.download_error || undefined}>{dl === 'done' ? '✓ Downloaded' : DL_LABEL[dl]}</span>}
+          {dl !== 'none' && dl !== 'culled' && <span className={`badge ${dl === 'failed' ? 'warn' : dl === 'done' ? 'ok-badge' : ''}`} title={ep.download_error || undefined}>{dl === 'done' ? 'Downloaded' : DL_LABEL[dl]}</span>}
           {ep.queue_pos > 0 && <span className="badge cat">#{ep.queue_pos} in queue</span>}
           {ep.saved && <span className="badge">saved</span>}
           {ep.has_sponsors && <span className="badge" title="SponsorBlock segments known: they are skipped while playing">SB</span>}
@@ -88,23 +81,20 @@ export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, 
         {pct > 0 && !ep.completed && <div className="bar"><span className="fill" style={{ width: `${pct}%` }} /></div>}
       </div>
       <div className="ep-actions">
-        <button className={`btn ghost sm ${ep.queue_pos ? 'on' : ''}`} onClick={async () => upd(await act.queue(ep))} title={ep.queue_pos ? 'Remove from queue' : 'Add to queue'}>{ep.queue_pos ? '✓' : '+'}</button>
-        <button className={`btn ghost sm hide-sm dl-btn ${dl === 'done' ? 'done' : dl === 'failed' ? 'failed' : ''}`} onClick={async () => { if (dl === 'done' && !confirm('Delete the downloaded file?')) return; upd(await act.download(ep)) }} disabled={dl === 'queued' || dl === 'downloading'} title={dl === 'done' ? 'Downloaded — click to delete the file' : dl === 'failed' ? `Download failed: ${ep.download_error} — click to retry` : dl === 'queued' || dl === 'downloading' ? 'Downloading…' : 'Download'}>{dlIcon}</button>
-        <div className="menu-wrap" ref={menuRef}>
-          <button className="btn ghost sm" onClick={() => setMenu(m => !m)} aria-label="More">⋯</button>
-          {menu && (
-            <div className="menu" onClick={() => setMenu(false)}>
-              <button onClick={async () => upd(await act.queue(ep, true))}>Play next</button>
-              <button onClick={() => player.play(ep, { fromStart: true })}>Play from the start</button>
-              <button onClick={async () => upd(await act.save(ep))}>{ep.saved ? 'Unsave' : 'Save for later'}</button>
-              <button onClick={async () => upd(await act.played(ep, !ep.completed))}>{ep.completed ? 'Mark as unplayed' : 'Mark as played'}</button>
-              <button onClick={async () => { if (dl === 'done' && !confirm('Delete the downloaded file?')) return; upd(await act.download(ep)) }}>{dl === 'done' ? 'Delete download' : 'Download'}</button>
-              {ep.link && <a href={ep.link} target="_blank" rel="noreferrer">Open the original ↗</a>}
-              {ep.stream_url && dl === 'done' && <a href={`${ep.stream_url}?download=1`}>Save the file…</a>}
-              <button className="danger-text" onClick={async () => { if (confirm('Remove this episode from the list? It comes back on the next refresh unless the feed dropped it.')) upd(await act.remove(ep)) }}>Remove episode</button>
-            </div>
-          )}
-        </div>
+        <button type="button" className={`btn ghost icon-only sm ${ep.queue_pos ? 'on' : ''}`} onClick={async () => upd(await act.queue(ep))} title={ep.queue_pos ? 'Remove from queue' : 'Add to queue'} aria-label={ep.queue_pos ? 'Remove from queue' : 'Add to queue'}><Icon name={ep.queue_pos ? 'check' : 'plus'} size={16} /></button>
+        <button type="button" className={`btn ghost icon-only sm hide-sm dl-btn ${dl === 'done' ? 'done' : dl === 'failed' ? 'failed' : ''}`} onClick={async () => { if (dl === 'done' && !confirm('Delete the downloaded file?')) return; upd(await act.download(ep)) }} disabled={dl === 'queued' || dl === 'downloading'} title={dl === 'done' ? 'Downloaded — click to delete the file' : dl === 'failed' ? `Download failed: ${ep.download_error} — click to retry` : dl === 'queued' || dl === 'downloading' ? 'Downloading…' : 'Download'}>{dlIcon}</button>
+        <MenuButton label="More" className="btn ghost icon-only sm" align="right" width={220} items={(): MenuItem[] => [
+          { label: 'Play next', icon: 'queue', onSelect: async () => upd(await act.queue(ep, true)) },
+          { label: 'Play from the start', icon: 'skip-prev', onSelect: () => player.play(ep, { fromStart: true }) },
+          { label: ep.saved ? 'Unsave' : 'Save for later', icon: 'heart', onSelect: async () => upd(await act.save(ep)) },
+          { label: ep.completed ? 'Mark as unplayed' : 'Mark as played', icon: ep.completed ? 'circle' : 'check-circle', onSelect: async () => upd(await act.played(ep, !ep.completed)) },
+          { label: dl === 'done' ? 'Delete download' : 'Download', icon: dl === 'done' ? 'trash' : 'download', disabled: dl === 'queued' || dl === 'downloading', onSelect: async () => { if (dl === 'done' && !confirm('Delete the downloaded file?')) return; upd(await act.download(ep)) } },
+          ...(ep.link || (ep.stream_url && dl === 'done') ? ['sep' as const] : []),
+          ...(ep.link ? [{ label: 'Open the original', icon: 'external', onSelect: () => window.open(ep.link, '_blank', 'noreferrer') }] : []),
+          ...(ep.stream_url && dl === 'done' ? [{ label: 'Save the file…', icon: 'download', onSelect: () => { const a = document.createElement('a'); a.href = `${ep.stream_url}?download=1`; document.body.appendChild(a); a.click(); a.remove() } }] : []),
+          'sep',
+          { label: 'Remove episode', icon: 'trash', danger: true, onSelect: async () => { if (confirm('Remove this episode from the list? It comes back on the next refresh unless the feed dropped it.')) upd(await act.remove(ep)) } },
+        ]}><Icon name="more" size={16} /></MenuButton>
       </div>
     </div>
   )

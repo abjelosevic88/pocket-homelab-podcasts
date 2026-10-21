@@ -1,6 +1,7 @@
 import { api } from '../lib/api'
 import { clock } from '../lib/format'
 import { useAsync } from './ui'
+import { Icon } from './icons'
 
 // Your notes about this episode, from Pocket Notes (notes there that link to its page), and a
 // way to start one at the moment you are at. Shows nothing where there is no Pocket Notes to
@@ -29,16 +30,16 @@ function atMoment(newURL: string, at: number): string {
 export function NotesPanel({ src, at }: { src: string; at: number }) {
   const { data } = useAsync(() => api.get<NotesBox>(src), [src])
   if (!data || data.missing) return null
-  const label = at >= 5 ? `+ Note at ${clock(at)}` : '+ New note'
+  const label = <><Icon name="plus" size={14} />{at >= 5 ? `Note at ${clock(at)}` : 'New note'}</>
   return (
     <div className="epx-panel notes-panel">
       <h3>Notes {data.notes.length > 0 && <span className="muted">{data.notes.length}</span>}
         <span className="spacer" />
         {data.available && data.new_url
           ? <a className="btn ghost sm" href={atMoment(data.new_url, at)} target="_blank" rel="noreferrer" title="Opens Pocket Notes with a note linked to this episode, at this moment">{label}</a>
-          : <span title={data.reason}><button className="btn ghost sm" disabled aria-disabled>{label}</button></span>}
+          : <span title={data.reason}><button type="button" className="btn ghost sm" disabled aria-disabled>{label}</button></span>}
       </h3>
-      {!data.available ? <p className="muted small">🔒 {data.reason}</p>
+      {!data.available ? <p className="muted small row top"><Icon name="lock" size={14} />{data.reason}</p>
         : data.notes.length === 0 ? <p className="muted small">No notes about this episode yet. Start one at the moment you are at; any note that links to this page shows up here.</p>
         : <ul className="notes-list">{data.notes.map(n => (
             <li key={n.id}><a href={n.url} target="_blank" rel="noreferrer">

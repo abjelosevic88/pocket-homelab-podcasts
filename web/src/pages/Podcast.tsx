@@ -3,11 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, upload, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import type { Episode, Podcast as PodcastT } from '../lib/types'
-import { Card, Confirm, Empty, Field, Loading, Modal, PageHeader, Segmented, useAsync, useDebounce, useToast } from '../components/ui'
+import { Confirm, Empty, Field, Loading, MenuButton, Modal, Segmented, Switch, useAsync, useDebounce, useToast } from '../components/ui'
 import { EpisodeList } from '../components/EpisodeRow'
 import { Artwork } from '../components/Artwork'
 import { ago, bytes, fmtDate, plain } from '../lib/format'
 import { safeHTML } from '../components/Player'
+import { Icon } from '../components/icons'
+import { useCrumb } from '../components/Layout'
 
 export default function Podcast() {
   const { id } = useParams()
@@ -26,6 +28,7 @@ export default function Podcast() {
   const [busy, setBusy] = useState(false)
   const [more, setMore] = useState(false)
   useEffect(() => { setPage(0) }, [status, sort, dq, id])
+  useCrumb(p ? [{ label: 'Podcasts', to: '/podcasts' }, { label: p.title }] : [{ label: 'Podcasts', to: '/podcasts' }, { label: '…' }])
   const setEps = useCallback((list: Episode[]) => eps.setData(d => d ? { ...d, episodes: list } : d), [eps])
   useEffect(() => {
     if (!p?.refreshing) return
@@ -56,21 +59,30 @@ export default function Podcast() {
           {p.author && <div className="pod-author">{p.author}</div>}
           <div className="muted small pod-facts">
             <span>{p.episode_count} episodes</span>{p.unplayed_count > 0 && <span>{p.unplayed_count} unplayed</span>}{p.downloaded_count > 0 && <span>{p.downloaded_count} downloaded · {bytes(p.downloaded_bytes)}</span>}
-            {p.last_refresh_ok && <span title={p.last_refresh_ok}>checked {ago(p.last_refresh_ok)}</span>}{p.refreshing && <span className="row"><span className="spinner sm" /> refreshing</span>}
+            {p.last_refresh_ok && <span title={p.last_refresh_ok}>checked {ago(p.last_refresh_ok)}</span>}{p.refreshing && <span className="row" style={{ gap: 6 }}><span className="spinner sm" /> refreshing</span>}
           </div>
-          {p.last_error && <div className="callout danger small mt-sm">Last refresh failed: {p.last_error}{p.failures > 1 && ` (${p.failures}× in a row — next try is spaced out)`}</div>}
-          {desc && <div className={`pod-desc md ${more ? '' : 'clamped'}`}>{more ? <div dangerouslySetInnerHTML={{ __html: safeHTML(desc) }} /> : plain(desc, 320)}{plain(desc, 400).length > 300 && <button className="btn ghost sm read-more" onClick={() => setMore(m => !m)}>{more ? 'less' : 'more'}</button>}</div>}
+          {p.last_error && <div className="callout danger small mt-sm"><Icon name="alert" size={15} /><span>Last refresh failed: {p.last_error}{p.failures > 1 && ` (${p.failures}× in a row — next try is spaced out)`}</span></div>}
+          {desc && <div className={`pod-desc md ${more ? '' : 'clamped'}`}>{more ? <div dangerouslySetInnerHTML={{ __html: safeHTML(desc) }} /> : plain(desc, 320)}{plain(desc, 400).length > 300 && <button type="button" className="link-btn read-more" onClick={() => setMore(m => !m)}>{more ? 'less' : 'more'}</button>}</div>}
           <div className="row wrap mt-sm">
-            <button className="btn primary" onClick={refresh} disabled={busy || p.refreshing}>{busy ? 'Refreshing…' : '↻ Refresh'}</button>
-            <button className={`btn ${p.favorite ? 'on' : ''}`} onClick={fav} title="Favourites stay on top">{p.favorite ? '★ Favourite' : '☆ Favourite'}</button>
-            <button className="btn" onClick={() => setSettings(true)}>⚙ Settings</button>
-            {p.site_url && <a className="btn ghost" href={p.site_url} target="_blank" rel="noreferrer">Website ↗</a>}
-            <div className="menu-wrap"><MoreMenu onMarkAll={markAll} onDownload={dlMore} onRemoveFiles={rmFiles} onUnsubscribe={() => setUnsub(true)} kind={p.kind} /></div>
+            <button type="button" className="btn primary" onClick={refresh} disabled={busy || p.refreshing}><Icon name="refresh" size={15} />{busy ? 'Refreshing…' : 'Refresh'}</button>
+            <button type="button" className={`btn ${p.favorite ? 'on' : ''}`} onClick={fav} title="Favourites stay on top" aria-pressed={p.favorite}><Icon name={p.favorite ? 'star-fill' : 'star'} size={15} />Favourite</button>
+            <button type="button" className="btn" onClick={() => setSettings(true)}><Icon name="settings" size={15} />Settings</button>
+            {p.site_url && <a className="btn ghost" href={p.site_url} target="_blank" rel="noreferrer"><Icon name="external" size={15} />Website</a>}
+            <MenuButton label="More" className="btn ghost icon-only" width={260} items={[
+              { label: 'Mark all as played', icon: 'check-circle', onSelect: () => markAll(true) },
+              { label: 'Mark all as unplayed', icon: 'circle', onSelect: () => markAll(false) },
+              'sep',
+              { label: p.kind === 'youtube' ? 'Download 5 more videos' : 'Download the newest 5', icon: 'download', onSelect: dlMore },
+              { label: 'Remove files of played episodes', icon: 'trash', onSelect: () => rmFiles(true) },
+              { label: 'Remove all files', icon: 'trash', onSelect: () => rmFiles(false) },
+              'sep',
+              { label: 'Unsubscribe', icon: 'x-circle', danger: true, onSelect: () => setUnsub(true) },
+            ]}><Icon name="more" size={18} /></MenuButton>
           </div>
         </div>
       </div>
       <div className="toolbar mt">
-        <label className="search"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search episodes…" /></label>
+        <label className="search"><Icon name="search" size={15} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search episodes…" aria-label="Search episodes" /></label>
         <Segmented size="sm" value={status} onChange={setStatus} options={[{ value: '', label: 'All' }, { value: 'unfinished', label: 'Unplayed' }, { value: 'partial', label: 'In progress' }, { value: 'played', label: 'Played' }]} />
         <Segmented size="sm" value={sort} onChange={setSort} options={[{ value: '', label: 'Newest' }, { value: 'oldest', label: 'Oldest' }, { value: 'longest', label: 'Longest' }, { value: 'shortest', label: 'Shortest' }]} />
       </div>
@@ -79,32 +91,15 @@ export default function Podcast() {
           <EpisodeList episodes={eps.data?.episodes || []} onChange={setEps} showPodcast={false} empty={<Empty title={p.kind === 'youtube' && p.episode_count === 0 ? 'Indexing…' : 'No episodes'}>{p.kind === 'youtube' && p.episode_count === 0 ? 'The channel is being read; this takes a few seconds.' : dq ? 'Nothing matches.' : 'This feed has no episodes yet.'}</Empty>} />
           {eps.data && eps.data.total > LIMIT && (
             <div className="row mt" style={{ justifyContent: 'center' }}>
-              <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Newer</button>
+              <button type="button" className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}><Icon name="chevron-left" size={15} />Newer</button>
               <span className="muted small">{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, eps.data.total)} of {eps.data.total}</span>
-              <button className="btn" disabled={(page + 1) * LIMIT >= eps.data.total} onClick={() => setPage(p => p + 1)}>Older →</button>
+              <button type="button" className="btn" disabled={(page + 1) * LIMIT >= eps.data.total} onClick={() => setPage(p => p + 1)}>Older<Icon name="chevron-right" size={15} /></button>
             </div>
           )}
         </>
       )}
       {settings && <PodcastSettings p={p} onClose={() => setSettings(false)} onSaved={np => { setP(np); setSettings(false) }} />}
-      {unsub && <Confirm title={`Unsubscribe from ${p.title}?`} message="Its episodes, your progress on them and every downloaded file are deleted." onCancel={() => setUnsub(false)} onConfirm={async () => { await api.del(`${V1}/podcasts/${p.id}`); toast('Unsubscribed'); navigate('/podcasts') }} />}
-    </>
-  )
-}
-
-function MoreMenu({ onMarkAll, onDownload, onRemoveFiles, onUnsubscribe, kind }: { onMarkAll: (v: boolean) => void; onDownload: () => void; onRemoveFiles: (played: boolean) => void; onUnsubscribe: () => void; kind: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button className="btn ghost" onClick={() => setOpen(o => !o)}>⋯</button>
-      {open && <div className="menu" onClick={() => setOpen(false)} onMouseLeave={() => setOpen(false)}>
-        <button onClick={() => onMarkAll(true)}>Mark all as played</button>
-        <button onClick={() => onMarkAll(false)}>Mark all as unplayed</button>
-        <button onClick={onDownload}>{kind === 'youtube' ? 'Download 5 more videos' : 'Download the newest 5'}</button>
-        <button onClick={() => onRemoveFiles(true)}>Remove files of played episodes</button>
-        <button onClick={() => onRemoveFiles(false)}>Remove all files</button>
-        <button className="danger-text" onClick={onUnsubscribe}>Unsubscribe</button>
-      </div>}
+      {unsub && <Confirm title={`Unsubscribe from ${p.title}?`} message="Its episodes, your progress on them and every downloaded file are deleted." confirmLabel="Unsubscribe" onCancel={() => setUnsub(false)} onConfirm={async () => { await api.del(`${V1}/podcasts/${p.id}`); toast('Unsubscribed'); navigate('/podcasts') }} />}
     </>
   )
 }
@@ -134,7 +129,7 @@ function PodcastSettings({ p, onClose, onSaved }: { p: PodcastT; onClose: () => 
   const resetArt = async () => { onSaved(await api.del<PodcastT>(`${V1}/podcasts/${p.id}/artwork`)); toast('Back to the feed artwork') }
   const copy = (t: string) => { navigator.clipboard?.writeText(t); toast('Copied') }
   const check = (k: keyof PodcastT, label: string, help?: string) => (
-    <label className="ps-check"><input type="checkbox" checked={Boolean(f[k])} onChange={e => set(k, e.target.checked)} /><span><b>{label}</b>{help && <span className="muted small block">{help}</span>}</span></label>
+    <div className="setting-row ps-switch"><div className="setting-text"><div className="setting-title">{label}</div>{help && <div className="setting-help">{help}</div>}</div><div className="setting-control"><Switch checked={Boolean(f[k])} onChange={v => set(k, v)} label={label} /></div></div>
   )
   return (
     <Modal title={`Settings — ${p.title}`} onClose={onClose} size="lg">
@@ -146,7 +141,7 @@ function PodcastSettings({ p, onClose, onSaved }: { p: PodcastT; onClose: () => 
             <div className="ps-fields">
               <Field label="Title"><input value={f.title} onChange={e => set('title', e.target.value)} /></Field>
               <div className="row wrap" style={{ gap: 8 }}>
-                <label className="btn sm">Upload artwork…<input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && uploadArt(e.target.files[0])} /></label>
+                <label className="btn sm"><Icon name="upload" size={14} />Upload artwork…<input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && uploadArt(e.target.files[0])} /></label>
                 {p.artwork_file && !picks && <button type="button" className="btn ghost sm" onClick={resetArt}>Use the feed's artwork</button>}
               </div>
               <div className="ps-inline"><input value={artURL} onChange={e => setArtURL(e.target.value)} placeholder="…or paste an image URL" spellCheck={false} /><button type="button" className="btn sm" onClick={artFromURL} disabled={!artURL}>Use</button></div>
@@ -183,7 +178,7 @@ function PodcastSettings({ p, onClose, onSaved }: { p: PodcastT; onClose: () => 
         <section className="ps-section">
           <h3>Public feed</h3>
           <p className="muted small" style={{ margin: 0 }}>Subscribe to this in Apple Podcasts, Overcast or any podcast app.</p>
-          <div className="ps-inline"><code className="ps-url" title={feedURL}>{feedURL}</code><button type="button" className="btn sm" onClick={() => copy(feedURL)}>Copy</button></div>
+          <div className="ps-inline"><code className="ps-url" title={feedURL}>{feedURL}</code><button type="button" className="btn sm" onClick={() => copy(feedURL)}><Icon name="copy" size={14} />Copy</button></div>
           <Field group label="Episode date in the feed" help="“Downloaded” puts old episodes you add later at the top instead of deep in the list.">
             <Segmented size="sm" value={f.pub_date_mode} onChange={v => set('pub_date_mode', v)} options={[{ value: 'published', label: 'Published' }, { value: 'downloaded', label: 'Downloaded' }]} />
           </Field>
@@ -191,7 +186,7 @@ function PodcastSettings({ p, onClose, onSaved }: { p: PodcastT; onClose: () => 
           {!picks && yt && <p className="muted small" style={{ margin: 0 }}>Source: <a href={p.feed_url} target="_blank" rel="noreferrer">{p.feed_url}</a></p>}
         </section>
 
-        <div className="ps-foot"><span className="muted small">{picks ? 'Your hand-picked episodes' : `Subscribed ${fmtDate(p.subscribed_at)}`}</span><span className="spacer" /><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Save</button></div>
+        <div className="ps-foot"><span className="muted small">{picks ? 'Your hand-picked episodes' : `Subscribed ${fmtDate(p.subscribed_at)}`}</span><span className="spacer" /><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>Save</button></div>
       </form>
     </Modal>
   )

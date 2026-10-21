@@ -1,25 +1,29 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import type { Playlist, Podcast } from '../lib/types'
-import { Card, Confirm, Empty, Field, Loading, Modal, PageHeader, Segmented, useAsync, useToast } from '../components/ui'
+import { Card, Confirm, Empty, Field, Loading, Modal, PageHeader, Segmented, Switch, useAsync, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { fmtDur } from '../lib/format'
 
 export default function Playlists() {
   const { data, loading, reload } = useAsync(() => api.get<Playlist[]>(`${V1}/playlists`), [])
   const [edit, setEdit] = useState<Partial<Playlist> | null>(null)
+  // /playlists?new=1 (the sidebar's + and the Add menu) opens a new one
+  const [sp, setSp] = useSearchParams()
+  useEffect(() => { if (sp.get('new')) { setEdit({}); const n = new URLSearchParams(sp); n.delete('new'); setSp(n, { replace: true }) } }, [sp, setSp])
   if (loading && !data) return <Loading />
   return (
     <>
-      <PageHeader title="Playlists" sub="Smart lists: a filter over your episodes that is always up to date." actions={<button className="btn primary" onClick={() => setEdit({})}>+ New playlist</button>} />
-      {!data || data.length === 0 ? <Empty title="No playlists" /> : (
+      <PageHeader title="Playlists" sub="Smart lists: a filter over your episodes that is always up to date." actions={<button type="button" className="btn primary" onClick={() => setEdit({})}><Icon name="plus" size={16} />New playlist</button>} />
+      {!data || data.length === 0 ? <Empty title="No playlists" icon="list-music" /> : (
         <div className="pl-grid">
           {data.map(p => (
             <Link key={p.id} to={`/playlists/${p.id}`} className="card pl-card">
               <span className="pl-icon">{p.icon || '✦'}</span>
               <div className="info"><div className="nm">{p.name}</div><div className="muted small">{p.description || describe(p)}</div></div>
               <span className="count-pill inline">{p.count}</span>
-              <button className="btn ghost sm" onClick={e => { e.preventDefault(); setEdit(p) }} title="Edit">✎</button>
+              <button type="button" className="btn ghost icon-only sm" onClick={e => { e.preventDefault(); setEdit(p) }} title="Edit" aria-label={`Edit ${p.name}`}><Icon name="edit" size={15} /></button>
             </Link>
           ))}
         </div>
@@ -62,10 +66,12 @@ export function PlaylistEditor({ pl, onClose, onSaved }: { pl: Partial<Playlist>
         <div className="two-col">
           <Card title="Include">
             <div className="grid" style={{ gap: 8 }}>
-              <label className="row"><input type="checkbox" checked={f.include_unplayed} onChange={e => set('include_unplayed', e.target.checked)} style={{ width: 'auto' }} /> Unplayed</label>
-              <label className="row"><input type="checkbox" checked={f.include_partial} onChange={e => set('include_partial', e.target.checked)} style={{ width: 'auto' }} /> In progress</label>
-              <label className="row"><input type="checkbox" checked={f.include_played} onChange={e => set('include_played', e.target.checked)} style={{ width: 'auto' }} /> Played</label>
-              <label className="row"><input type="checkbox" checked={f.downloaded_only} onChange={e => set('downloaded_only', e.target.checked)} style={{ width: 'auto' }} /> Only episodes downloaded to the server</label>
+              <div className="pl-switches">
+                <div className="setting-row"><div className="setting-text"><div className="setting-title">Unplayed</div></div><Switch size="sm" checked={f.include_unplayed} onChange={v => set('include_unplayed', v)} label="Unplayed" /></div>
+                <div className="setting-row"><div className="setting-text"><div className="setting-title">In progress</div></div><Switch size="sm" checked={f.include_partial} onChange={v => set('include_partial', v)} label="In progress" /></div>
+                <div className="setting-row"><div className="setting-text"><div className="setting-title">Played</div></div><Switch size="sm" checked={f.include_played} onChange={v => set('include_played', v)} label="Played" /></div>
+                <div className="setting-row"><div className="setting-text"><div className="setting-title">Only episodes downloaded to the server</div></div><Switch size="sm" checked={f.downloaded_only} onChange={v => set('downloaded_only', v)} label="Only downloaded" /></div>
+              </div>
               <div className="two-col tight">
                 <Field label="Min length (min)"><input type="number" min={0} value={mins(f.min_duration)} onChange={e => set('min_duration', Number(e.target.value) * 60)} className="num" /></Field>
                 <Field label="Max length (min)"><input type="number" min={0} value={mins(f.max_duration)} onChange={e => set('max_duration', Number(e.target.value) * 60)} className="num" /></Field>
@@ -83,11 +89,11 @@ export function PlaylistEditor({ pl, onClose, onSaved }: { pl: Partial<Playlist>
           </Card>
         </div>
         <div className="form-actions">
-          {f.id > 0 && <button type="button" className="btn ghost danger-text" style={{ marginRight: 'auto' }} onClick={() => setDel(true)}>Delete</button>}
-          <button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Save</button>
+          {f.id > 0 && <button type="button" className="btn ghost danger-text" style={{ marginRight: 'auto' }} onClick={() => setDel(true)}><Icon name="trash" size={15} />Delete</button>}
+          <button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>Save</button>
         </div>
       </form>
-      {del && <Confirm title={`Delete “${f.name}”?`} message="Only the list goes; episodes stay." onCancel={() => setDel(false)} onConfirm={async () => { await api.del(`${V1}/playlists/${f.id}`); onSaved() }} />}
+      {del && <Confirm title={`Delete “${f.name}”?`} message="Only the list goes; episodes stay." confirmLabel="Delete" onCancel={() => setDel(false)} onConfirm={async () => { await api.del(`${V1}/playlists/${f.id}`); onSaved() }} />}
     </Modal>
   )
 }

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { usePlayer, labelFor } from '../lib/player'
 import type { EpisodeDetail, Podcast } from '../lib/types'
-import { Loading, useAsync, useToast } from '../components/ui'
+import { Loading, MenuButton, type MenuItem, useAsync, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
+import { useCrumb } from '../components/Layout'
 import { useEpisodeActions } from '../components/EpisodeRow'
 import { Artwork } from '../components/Artwork'
 import { safeHTML } from '../components/Player'
@@ -19,8 +21,6 @@ export default function EpisodePage() {
   const act = useEpisodeActions()
   const { data: e, setData, reload } = useAsync(() => api.get<EpisodeDetail>(`${V1}/episodes/${id}`), [id])
   const [busy, setBusy] = useState(false)
-  const [menu, setMenu] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!e || (e.download !== 'queued' && e.download !== 'downloading')) return
     const t = setInterval(reload, 3000)
@@ -31,12 +31,7 @@ export default function EpisodePage() {
     window.addEventListener('pp:progress', h)
     return () => window.removeEventListener('pp:progress', h)
   }, [e, setData])
-  useEffect(() => {
-    if (!menu) return
-    const h = (ev: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(ev.target as Node)) setMenu(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [menu])
+  useCrumb(e ? [{ label: e.source?.title || e.podcast_title, to: e.source?.subscribed_id ? `/podcasts/${e.source.subscribed_id}` : `/podcasts/${e.podcast_id}` }, { label: 'Episode' }] : [{ label: 'Episodes', to: '/episodes' }, { label: '…' }])
   if (!e) return <Loading />
 
   const upd = (x: Partial<EpisodeDetail> | null) => { if (x === null) navigate(`/podcasts/${e.podcast_id}`); else setData({ ...e, ...x }) }
@@ -85,8 +80,8 @@ export default function EpisodePage() {
               {e.has_sponsors && <span className="badge" title="SponsorBlock segments are skipped while playing">SponsorBlock</span>}
             </div>
             <div className="epx-play">
-              <button className="epx-play-btn" onClick={() => playing ? player.pause() : player.play(e)} disabled={!canPlay && downloading} aria-label={playLabel}>
-                {playing ? '❚❚' : downloading && !canPlay ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : !canPlay ? '↓' : '▶'}
+              <button type="button" className="epx-play-btn" onClick={() => playing ? player.pause() : player.play(e)} disabled={!canPlay && downloading} aria-label={playLabel}>
+                {playing ? <Icon name="pause" size={22} /> : downloading && !canPlay ? <span className="spinner on-accent" /> : !canPlay ? <Icon name="download" size={22} strokeWidth={2} /> : <Icon name="play" size={22} />}
               </button>
               <div className="epx-play-info">
                 <b>{playLabel}</b>
@@ -95,34 +90,32 @@ export default function EpisodePage() {
                 ) : e.completed ? <span className="muted small">You finished this one</span> : !canPlay ? <span className="muted small">{downloading ? 'Fetching the audio to your server' : 'Fetches the audio first'}</span> : null}
               </div>
             </div>
-            {fromNote > 0 && canPlay && <div className="epx-from-note"><button className="btn sm primary" onClick={() => playFrom(fromNote)}>▶ Play from {clock(fromNote)}, where your note is</button></div>}
+            {fromNote > 0 && canPlay && <div className="epx-from-note"><button type="button" className="btn sm primary" onClick={() => playFrom(fromNote)}><Icon name="play" size={13} />Play from {clock(fromNote)}, where your note is</button></div>}
             <div className="epx-actions">
-              <button className={`pill ${e.queue_pos ? 'on' : ''}`} onClick={() => run(async () => upd(await act.queue(e)))} disabled={busy}>{e.queue_pos ? '✓ Queued' : '＋ Queue'}</button>
-              <button className="pill" onClick={() => run(async () => upd(await act.queue(e, true)))} disabled={busy || e.queue_pos === 1}>↱ Play next</button>
-              <button className={`pill ${e.saved ? 'on' : ''}`} onClick={() => run(async () => upd(await act.save(e)))} disabled={busy}>{e.saved ? '♥ Saved' : '♡ Save'}</button>
-              <button className={`pill ${e.completed ? 'on' : ''}`} onClick={() => run(async () => upd(await act.played(e, !e.completed)))} disabled={busy}>{e.completed ? '✓ Played' : '○ Mark played'}</button>
+              <button type="button" className={`pill ${e.queue_pos ? 'on' : ''}`} onClick={() => run(async () => upd(await act.queue(e)))} disabled={busy}><Icon name={e.queue_pos ? 'check' : 'plus'} size={14} />{e.queue_pos ? 'Queued' : 'Queue'}</button>
+              <button type="button" className="pill" onClick={() => run(async () => upd(await act.queue(e, true)))} disabled={busy || e.queue_pos === 1}><Icon name="queue" size={14} />Play next</button>
+              <button type="button" className={`pill ${e.saved ? 'on' : ''}`} onClick={() => run(async () => upd(await act.save(e)))} disabled={busy}><Icon name={e.saved ? 'heart-fill' : 'heart'} size={14} />{e.saved ? 'Saved' : 'Save'}</button>
+              <button type="button" className={`pill ${e.completed ? 'on' : ''}`} onClick={() => run(async () => upd(await act.played(e, !e.completed)))} disabled={busy}><Icon name={e.completed ? 'check-circle' : 'circle'} size={14} />{e.completed ? 'Played' : 'Mark played'}</button>
               {e.download === 'done'
-                ? <button className="pill ok" onClick={() => { if (confirm(`Delete the downloaded file (${bytes(e.file_bytes)})? The episode stays and can be downloaded again.`)) run(async () => upd(await act.download(e))) }} disabled={busy} title={`Downloaded to your Pocket Podcasts server (${bytes(e.file_bytes)}). Plays instantly and stays even if the publisher removes it. Click to delete the file.`}>✓ Downloaded</button>
+                ? <button type="button" className="pill ok" onClick={() => { if (confirm(`Delete the downloaded file (${bytes(e.file_bytes)})? The episode stays and can be downloaded again.`)) run(async () => upd(await act.download(e))) }} disabled={busy} title={`Downloaded to your Pocket Podcasts server (${bytes(e.file_bytes)}). Plays instantly and stays even if the publisher removes it. Click to delete the file.`}><Icon name="check-circle" size={14} />Downloaded</button>
                 : downloading
-                  ? <button className="pill" disabled><span className="spinner sm" /> Downloading…</button>
+                  ? <button type="button" className="pill" disabled><span className="spinner sm" /> Downloading…</button>
                   : e.download === 'failed'
-                    ? <button className="pill bad" onClick={() => run(async () => upd(await act.download(e)))} disabled={busy} title={e.download_error}>⚠ Download failed — retry</button>
-                    : <button className="pill" onClick={() => run(async () => upd(await act.download(e)))} disabled={busy} title="Download the audio to your Pocket Podcasts server">↓ Download</button>}
-              <div className="menu-wrap" ref={menuRef}>
-                <button className="pill" onClick={() => setMenu(m => !m)} aria-label="More">⋯</button>
-                {menu && (
-                  <div className="menu" onClick={() => setMenu(false)}>
-                    <button onClick={() => player.play(e, { fromStart: true })}>Play from the start</button>
-                    {e.download === 'done'
-                      ? <><a href={`${e.stream_url}?download=1`}>Save the file to this device</a><button onClick={() => { if (confirm('Delete the downloaded file?')) run(async () => upd(await act.download(e))) }}>Delete download</button></>
-                      : !downloading && <button onClick={() => run(async () => upd(await act.download(e)))}>Download</button>}
-                    {e.link && <a href={e.link} target="_blank" rel="noreferrer">{e.podcast_kind === 'youtube' || e.youtube_id ? 'Watch on YouTube ↗' : 'Open the episode page ↗'}</a>}
-                    {e.transcript_url && <a href={e.transcript_url} target="_blank" rel="noreferrer">Transcript ↗</a>}
-                    {e.last_played_at && <button onClick={() => run(async () => { await api.del(`${V1}/episodes/${e.id}/history`); setData({ ...e, play_position: 0, completed: false, last_played_at: '' }) })}>Forget my progress</button>}
-                    <button className="danger-text" onClick={() => { if (confirm('Remove this episode?')) act.remove(e).then(() => { toast('Removed'); navigate(`/podcasts/${e.podcast_id}`) }) }}>Remove episode</button>
-                  </div>
-                )}
-              </div>
+                    ? <button type="button" className="pill bad" onClick={() => run(async () => upd(await act.download(e)))} disabled={busy} title={e.download_error}><Icon name="alert" size={14} />Download failed — retry</button>
+                    : <button type="button" className="pill" onClick={() => run(async () => upd(await act.download(e)))} disabled={busy} title="Download the audio to your Pocket Podcasts server"><Icon name="download" size={14} />Download</button>}
+              <MenuButton label="More" className="pill pill-icon" width={250} items={(): MenuItem[] => [
+                { label: 'Play from the start', icon: 'skip-prev', onSelect: () => player.play(e, { fromStart: true }) },
+                ...(e.download === 'done'
+                  ? [{ label: 'Save the file to this device', icon: 'download', onSelect: () => { const a = document.createElement('a'); a.href = `${e.stream_url}?download=1`; document.body.appendChild(a); a.click(); a.remove() } },
+                     { label: 'Delete download', icon: 'trash', onSelect: () => { if (confirm('Delete the downloaded file?')) run(async () => upd(await act.download(e))) } }]
+                  : !downloading ? [{ label: 'Download', icon: 'download', onSelect: () => run(async () => upd(await act.download(e))) }] : []),
+                ...(e.link || e.transcript_url ? ['sep' as const] : []),
+                ...(e.link ? [{ label: e.podcast_kind === 'youtube' || e.youtube_id ? 'Watch on YouTube' : 'Open the episode page', icon: 'external', onSelect: () => window.open(e.link, '_blank', 'noreferrer') }] : []),
+                ...(e.transcript_url ? [{ label: 'Transcript', icon: 'text', onSelect: () => window.open(e.transcript_url, '_blank', 'noreferrer') }] : []),
+                ...(e.last_played_at ? ['sep' as const, { label: 'Forget my progress', icon: 'undo', onSelect: () => run(async () => { await api.del(`${V1}/episodes/${e.id}/history`); setData({ ...e, play_position: 0, completed: false, last_played_at: '' }) }) }] : []),
+                'sep',
+                { label: 'Remove episode', icon: 'trash', danger: true, onSelect: () => { if (confirm('Remove this episode?')) act.remove(e).then(() => { toast('Removed'); navigate(`/podcasts/${e.podcast_id}`) }) } },
+              ]}><Icon name="more" size={16} /></MenuButton>
             </div>
           </div>
         </div>
@@ -134,8 +127,8 @@ export default function EpisodePage() {
             ? <>You follow <b>{src.title || 'this show'}</b>.</>
             : <>Picked from <b>{src.title || (src.kind === 'youtube' ? 'a YouTube channel' : 'a podcast')}</b> — only this episode is in your library.</>}</span>
           <span className="row" style={{ gap: 6, flexShrink: 0 }}>
-            <Link className="btn sm" to={showLink}>All episodes →</Link>
-            {!src.subscribed_id && <button className="btn sm primary" onClick={follow} disabled={busy}>+ Follow show</button>}
+            <Link className="btn sm" to={showLink}>All episodes<Icon name="chevron-right" size={14} /></Link>
+            {!src.subscribed_id && <button type="button" className="btn sm primary" onClick={follow} disabled={busy}><Icon name="plus" size={14} />Follow show</button>}
           </span>
         </section>
       )}
@@ -151,7 +144,7 @@ export default function EpisodePage() {
             <div className="epx-panel">
               <h3>Chapters <span className="muted">{e.chapters.length}</span></h3>
               <ul className="chapters">
-                {e.chapters.map((c, i) => <li key={i} className={isCur && player.chapter === c ? 'cur' : ''}><button onClick={() => { if (isCur) player.seek(c.start); else player.play({ ...e, play_position: Math.floor(c.start) }) }}><span className="mono">{clock(c.start)}</span><span className="grow">{c.title}</span></button></li>)}
+                {e.chapters.map((c, i) => <li key={i} className={isCur && player.chapter === c ? 'cur' : ''}><button type="button" onClick={() => { if (isCur) player.seek(c.start); else player.play({ ...e, play_position: Math.floor(c.start) }) }}><span className="mono">{clock(c.start)}</span><span className="grow">{c.title}</span></button></li>)}
               </ul>
             </div>
           )}
@@ -159,7 +152,7 @@ export default function EpisodePage() {
             <div className="epx-panel">
               <h3>SponsorBlock <span className="muted">{e.sponsors.length}</span></h3>
               <ul className="chapters">
-                {e.sponsors.map((s, i) => <li key={i}><button onClick={() => isCur && player.seek(s.start)}><span className="mono">{clock(s.start)}</span><span className="grow">{labelFor(s.category)}</span><span className="muted small">{Math.round(s.end - s.start)} s</span></button></li>)}
+                {e.sponsors.map((s, i) => <li key={i}><button type="button" onClick={() => isCur && player.seek(s.start)}><span className="mono">{clock(s.start)}</span><span className="grow">{labelFor(s.category)}</span><span className="muted small">{Math.round(s.end - s.start)} s</span></button></li>)}
               </ul>
               <p className="muted small" style={{ margin: '8px 0 0' }}>Skipped automatically for the categories in Settings → Playback.</p>
             </div>
@@ -172,7 +165,7 @@ export default function EpisodePage() {
               {e.pub_date && <><dt>Published</dt><dd>{fmtDate(e.pub_date)}</dd></>}
               {e.duration > 0 && <><dt>Length</dt><dd>{fmtDur(e.duration)}</dd></>}
               {e.last_played_at && <><dt>Last played</dt><dd>{fmtDate(e.last_played_at)}{e.play_count > 1 && ` · ${e.play_count}×`}</dd></>}
-              <dt>Download</dt><dd>{e.download === 'done' ? <span className="ok">✓ Downloaded · {bytes(e.file_bytes)}</span> : e.download === 'none' || e.download === 'culled' ? 'Not downloaded — streams from the publisher' : DL_LABEL[e.download]}{e.download_error && <div className="bad small">{e.download_error}</div>}</dd>
+              <dt>Download</dt><dd>{e.download === 'done' ? <span className="ok">Downloaded · {bytes(e.file_bytes)}</span> : e.download === 'none' || e.download === 'culled' ? 'Not downloaded — streams from the publisher' : DL_LABEL[e.download]}{e.download_error && <div className="bad small">{e.download_error}</div>}</dd>
             </dl>
           </div>
         </aside>

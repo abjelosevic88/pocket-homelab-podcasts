@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { usePlayer } from '../lib/player'
 import { useDebounce, useToast } from './ui'
 import { Artwork } from './Artwork'
+import { Icon } from './icons'
 import { searchYouTube, type YTHit } from '../lib/youtube'
 import { SourcePeek } from '../pages/Add'
 import type { Episode, Podcast, SearchResult } from '../lib/types'
@@ -106,12 +107,13 @@ export function CommandPalette() {
   const pages: Item[] = useMemo(() => {
     const p = (title: string, to: string, icon: string, sub?: string): Item => ({ key: 'go:' + to, section: 'Go to', title, icon, sub, open: () => go(to) })
     return [
-      p('Home', '/home', '◉'), p('Podcasts', '/podcasts', '▤'), p('Episodes', '/episodes', '☰'), p('Up next (queue)', '/queue', '≡'),
-      p('Playlists', '/playlists', '✦'), p('Add a podcast', '/add', '+', 'Search directories or paste a feed'), p('Add from YouTube', '/add?tab=youtube', '▶', 'Channels, videos, playlists'),
-      p('Saved', '/saved', '♡'), p('History', '/history', '↺'), p('Downloads', '/downloads', '↓'), p('Stats', '/stats', '◔'), p('Settings', '/settings', '⚙'),
-      p('Public feeds', '/settings?tab=feeds', '⌁', 'Feed URLs for Apple Podcasts & co.'),
-      { key: 'do:refresh', section: 'Go to', title: 'Refresh all feeds', icon: '↻', open: () => { close(); api.post(`${V1}/refresh`).then(() => toast('Refreshing all feeds in the background')).catch(e => toast((e as Error).message, 'err')) } },
-      { key: 'do:theme', section: 'Go to', title: 'Toggle dark mode', icon: '☾', open: () => { toggleTheme(); close() } },
+      p('Home', '/home', 'home'), p('Podcasts', '/podcasts', 'podcast'), p('Episodes', '/episodes', 'list'), p('Up next (queue)', '/queue', 'queue'),
+      p('Playlists', '/playlists', 'list-music'), p('Add a podcast', '/add', 'plus', 'Search directories or paste a feed'), p('Add from YouTube', '/add?tab=youtube', 'youtube', 'Channels, videos, playlists'),
+      p('Saved', '/saved', 'heart'), p('History', '/history', 'history'), p('Downloads', '/downloads', 'download'), p('Stats', '/stats', 'bar-chart'), p('Settings', '/settings', 'settings'),
+      p('Public feeds', '/settings/feeds', 'rss', 'Feed URLs for Apple Podcasts & co.'),
+      { key: 'do:refresh', section: 'Go to', title: 'Refresh all feeds', icon: 'refresh', open: () => { close(); api.post(`${V1}/refresh`).then(() => toast('Refreshing all feeds in the background')).catch(e => toast((e as Error).message, 'err')) } },
+      { key: 'do:theme', section: 'Go to', title: 'Toggle dark mode', icon: 'moon', open: () => { toggleTheme(); close() } },
+      { key: 'do:keys', section: 'Go to', title: 'Keyboard shortcuts', icon: 'keyboard', open: () => { close(); window.dispatchEvent(new CustomEvent('pp:shortcuts')) } },
     ]
   }, [go, close, toast, toggleTheme])
 
@@ -129,7 +131,7 @@ export function CommandPalette() {
       out.push(...(eps || []).map((e): Item => ({
         key: 'ep:' + e.id, section: 'Your episodes', title: e.title, sub: [e.podcast_title, fmtDate(e.pub_date), e.duration ? fmtDur(e.duration) : ''].filter(Boolean).join(' · '),
         thumb: e.artwork_url || e.podcast_artwork, open: () => go(`/episodes/${e.id}`),
-        actions: [{ label: player.isCurrent(e.id) && player.playing ? '❚❚' : '▶ Play', run: () => { player.play(e); close() } }],
+        actions: [{ label: player.isCurrent(e.id) && player.playing ? 'Pause' : 'Play', run: () => { player.play(e); close() } }],
       })))
     }
     if (scope === 'all' || scope === 'podcasts') {
@@ -187,13 +189,13 @@ export function CommandPalette() {
         <div className="cmdk-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) close() }}>
           <div className="cmdk" role="dialog" aria-modal="true" aria-label="Search everything">
             <div className="cmdk-input">
-              <span className="ico" aria-hidden>⌕</span>
+              <Icon name="search" size={18} />
               <input ref={input} value={q} onChange={e => setQ(e.target.value)} onKeyDown={onKey} placeholder={scope === 'youtube' ? 'Search YouTube…' : scope === 'podcasts' ? 'Search podcast directories…' : scope === 'library' ? 'Search your podcasts and episodes…' : 'Search everything…'} aria-label="Search" spellCheck={false} />
               {loading && <span className="spinner sm" />}
-              <kbd onClick={close}>esc</kbd>
+              <kbd onClick={close} role="button" aria-label="Close">esc</kbd>
             </div>
             <div className="cmdk-scopes" role="tablist">
-              {SCOPES.map(s => <button key={s.value} role="tab" aria-selected={s.value === scope} className={s.value === scope ? 'active' : ''} onClick={() => { setScope(s.value); input.current?.focus() }}>{s.label}</button>)}
+              {SCOPES.map(s => <button key={s.value} type="button" role="tab" aria-selected={s.value === scope} className={s.value === scope ? 'active' : ''} onClick={() => { setScope(s.value); input.current?.focus() }}>{s.label}</button>)}
             </div>
             <div className="cmdk-list" ref={listRef}>
               {items.length === 0 && !loading && <div className="cmdk-empty">{dq.length < 2 ? 'Type to search your library, podcast directories and YouTube.' : 'Nothing found.'}</div>}
@@ -203,14 +205,14 @@ export function CommandPalette() {
                   <div key={it.key}>
                     {head && <div className="cmdk-section">{head}{head === 'YouTube' && yt === null && <span className="spinner sm" />}</div>}
                     <div data-i={i} className={`cmdk-item ${i === active ? 'active' : ''}`} onMouseMove={() => setActive(i)} onClick={() => it.open()} role="option" aria-selected={i === active}>
-                      {it.icon ? <span className="cmdk-icon">{it.icon}</span>
+                      {it.icon ? <span className="cmdk-icon"><Icon name={it.icon} size={16} /></span>
                         : it.wide ? <img className="cmdk-wide" src={it.thumb} alt="" loading="lazy" />
                         : <Artwork src={it.thumb} title={it.title} size="xs" className={it.round ? 'round' : ''} />}
                       <span className="cmdk-text">
                         <span className="cmdk-title">{it.badge && <span className={`yt-badge ${it.badge.cls}`}>{it.badge.text}</span>}{it.title}</span>
                         {it.sub && <span className="cmdk-sub">{it.sub}</span>}
                       </span>
-                      {it.actions && <span className="cmdk-actions" onClick={e => e.stopPropagation()}>{it.actions.map(a => <button key={a.label} className={`btn sm ${a.primary ? 'primary' : ''}`} disabled={a.disabled} onClick={a.run}>{a.label}</button>)}</span>}
+                      {it.actions && <span className="cmdk-actions" onClick={e => e.stopPropagation()}>{it.actions.map(a => <button key={a.label} type="button" className={`btn sm ${a.primary ? 'primary' : ''}`} disabled={a.disabled} onClick={a.run}>{a.label}</button>)}</span>}
                     </div>
                   </div>
                 )

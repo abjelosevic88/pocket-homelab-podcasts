@@ -4,6 +4,8 @@ import { usePlayer, labelFor } from '../lib/player'
 import { useApp } from '../lib/app-context'
 import { Artwork } from './Artwork'
 import { clock } from '../lib/format'
+import { Icon } from './icons'
+import { MenuButton, type MenuItem } from './ui'
 
 const RATES = [0.8, 1, 1.1, 1.2, 1.3, 1.5, 1.7, 2, 2.5]
 
@@ -24,16 +26,17 @@ export function Player() {
           <span className="fill" style={{ width: `${pct}%` }} />
           {p.sponsors.map(s => dur > 0 && <span key={s.start} className="seg" style={{ left: `${(s.start / dur) * 100}%`, width: `${((s.end - s.start) / dur) * 100}%` }} title={labelFor(s.category)} />)}
         </div>
-        <button className="pb-art" onClick={() => p.setExpanded(true)} aria-label="Open player"><Artwork src={e.artwork_url || e.podcast_artwork} title={e.podcast_title || e.title} size="xs" /></button>
+        <button type="button" className="pb-art" onClick={() => p.setExpanded(true)} aria-label="Open player"><Artwork src={e.artwork_url || e.podcast_artwork} title={e.podcast_title || e.title} size="xs" /></button>
         <div className="pb-info" onClick={() => p.setExpanded(true)}>
           <div className="t">{e.title}</div>
           <div className="s muted">{p.chapter ? p.chapter.title : e.podcast_title} · {clock(p.time)} / {clock(dur)}{p.rate !== 1 ? ` · ${p.rate}×` : ''}</div>
         </div>
         <div className="pb-controls">
-          <button className="btn ghost icon hide-sm" onClick={() => p.skip(-back)} title={`Back ${back} s`}>↺</button>
-          <button className="btn primary icon round" onClick={p.toggle} title={p.playing ? 'Pause' : 'Play'}>{p.loading ? <span className="spinner sm" style={{ borderTopColor: '#fff' }} /> : p.playing ? '❚❚' : '▶'}</button>
-          <button className="btn ghost icon" onClick={() => p.skip(fwd)} title={`Forward ${fwd} s`}>↻</button>
-          <button className="btn ghost icon hide-sm" onClick={p.next} title="Next in queue">⏭</button>
+          <button type="button" className="btn ghost icon-only hide-sm pb-skip" onClick={() => p.skip(-back)} title={`Back ${back} s`} aria-label={`Back ${back} seconds`}><Icon name="rotate-ccw" size={18} /></button>
+          <button type="button" className="btn primary round pb-play" onClick={p.toggle} title={p.playing ? 'Pause' : 'Play'} aria-label={p.playing ? 'Pause' : 'Play'}>{p.loading ? <span className="spinner sm on-accent" /> : <Icon name={p.playing ? 'pause' : 'play'} size={18} />}</button>
+          <button type="button" className="btn ghost icon-only pb-skip" onClick={() => p.skip(fwd)} title={`Forward ${fwd} s`} aria-label={`Forward ${fwd} seconds`}><Icon name="rotate-cw" size={18} /></button>
+          <button type="button" className="btn ghost icon-only hide-sm" onClick={p.next} title="Next in queue" aria-label="Next in queue"><Icon name="skip-next" size={16} /></button>
+          <button type="button" className="btn ghost icon-only hide-sm" onClick={() => p.setExpanded(true)} title="Open the player" aria-label="Open the player"><Icon name="chevron-up" size={18} /></button>
         </div>
       </div>
       {p.expanded && <Expanded />}
@@ -45,7 +48,6 @@ function Expanded() {
   const p = usePlayer()
   const { settings } = useApp()
   const [tab, setTab] = useState<'now' | 'chapters' | 'notes'>('now')
-  const [sleepOpen, setSleepOpen] = useState(false)
   const e = p.current!
   const dur = p.duration || e.duration || 0
   const back = settings?.skip_back || 10, fwd = settings?.skip_forward || 30
@@ -60,13 +62,13 @@ function Expanded() {
   return (
     <div className="player-full" ref={ref}>
       <div className="pf-head">
-        <button className="btn ghost icon" onClick={() => p.setExpanded(false)} aria-label="Close">⌄</button>
-        <div className="tabs" style={{ border: 0 }}>
-          <button className={tab === 'now' ? 'active' : ''} onClick={() => setTab('now')}>Now playing</button>
-          {p.chapters.length > 0 && <button className={tab === 'chapters' ? 'active' : ''} onClick={() => setTab('chapters')}>Chapters</button>}
-          <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>Notes</button>
+        <button type="button" className="btn ghost icon-only" onClick={() => p.setExpanded(false)} aria-label="Close the player" title="Close (esc)"><Icon name="chevron-down" size={20} /></button>
+        <div className="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'now'} className={tab === 'now' ? 'active' : ''} onClick={() => setTab('now')}>Now playing</button>
+          {p.chapters.length > 0 && <button type="button" role="tab" aria-selected={tab === 'chapters'} className={tab === 'chapters' ? 'active' : ''} onClick={() => setTab('chapters')}>Chapters</button>}
+          <button type="button" role="tab" aria-selected={tab === 'notes'} className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>Notes</button>
         </div>
-        <button className="btn ghost icon" onClick={() => { p.stop(); p.setExpanded(false) }} title="Stop and clear">✕</button>
+        <button type="button" className="btn ghost icon-only" onClick={() => { p.stop(); p.setExpanded(false) }} title="Stop and clear" aria-label="Stop and clear"><Icon name="x" size={18} /></button>
       </div>
       <div className="pf-body">
         {tab === 'now' && (
@@ -78,7 +80,7 @@ function Expanded() {
         )}
         {tab === 'chapters' && (
           <ul className="chapters">
-            {p.chapters.map((c, i) => <li key={i} className={p.chapter === c ? 'cur' : ''}><button onClick={() => p.seek(c.start)}><span className="mono">{clock(c.start)}</span><span className="grow">{c.title}</span></button></li>)}
+            {p.chapters.map((c, i) => <li key={i} className={p.chapter === c ? 'cur' : ''}><button type="button" onClick={() => p.seek(c.start)}><span className="mono">{clock(c.start)}</span><span className="grow">{c.title}</span></button></li>)}
           </ul>
         )}
         {tab === 'notes' && <div className="pf-notes md" dangerouslySetInnerHTML={{ __html: safeHTML(e.description) }} />}
@@ -86,25 +88,23 @@ function Expanded() {
       <div className="pf-controls">
         <div className="pf-seek">
           <input type="range" min={0} max={dur || 1} step={1} value={Math.min(p.time, dur || 1)} onChange={ev => p.seek(Number(ev.target.value))} aria-label="Position" />
-          <div className="row small muted"><span>{clock(p.time)}</span><span className="spacer" />{p.sponsors.length > 0 && settings?.auto_skip_sponsors && <span title="SponsorBlock on">SB ✓</span>}<span>-{clock(Math.max(0, dur - p.time))}</span></div>
+          <div className="row small muted"><span>{clock(p.time)}</span><span className="spacer" />{p.sponsors.length > 0 && settings?.auto_skip_sponsors && <span className="badge ok" title="SponsorBlock segments are skipped">SponsorBlock</span>}<span>-{clock(Math.max(0, dur - p.time))}</span></div>
         </div>
         <div className="pf-buttons">
-          <button className="btn ghost" onClick={() => p.seek(0)} title="Restart">⏮</button>
-          <button className="btn ghost lg" onClick={() => p.skip(-back)} title={`Back ${back} s`}>↺<small>{back}</small></button>
-          <button className="btn primary round xl" onClick={p.toggle}>{p.loading ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : p.playing ? '❚❚' : '▶'}</button>
-          <button className="btn ghost lg" onClick={() => p.skip(fwd)} title={`Forward ${fwd} s`}>↻<small>{fwd}</small></button>
-          <button className="btn ghost" onClick={p.next} title="Next in queue">⏭</button>
+          <button type="button" className="btn ghost icon-only lg" onClick={() => p.seek(0)} title="Restart" aria-label="Restart"><Icon name="skip-prev" size={18} /></button>
+          <button type="button" className="btn ghost lg pf-skip" onClick={() => p.skip(-back)} title={`Back ${back} s`} aria-label={`Back ${back} seconds`}><Icon name="rotate-ccw" size={22} /><small>{back}</small></button>
+          <button type="button" className="btn primary round xl" onClick={p.toggle} aria-label={p.playing ? 'Pause' : 'Play'}>{p.loading ? <span className="spinner on-accent" /> : <Icon name={p.playing ? 'pause' : 'play'} size={26} />}</button>
+          <button type="button" className="btn ghost lg pf-skip" onClick={() => p.skip(fwd)} title={`Forward ${fwd} s`} aria-label={`Forward ${fwd} seconds`}><Icon name="rotate-cw" size={22} /><small>{fwd}</small></button>
+          <button type="button" className="btn ghost icon-only lg" onClick={p.next} title="Next in queue" aria-label="Next in queue"><Icon name="skip-next" size={18} /></button>
         </div>
         <div className="pf-extra">
-          <div className="segmented sm">{RATES.map(r => <button key={r} className={Math.abs(p.rate - r) < 0.01 ? 'active' : ''} onClick={() => p.setRate(r)}>{r}×</button>)}</div>
-          <div className="menu-wrap">
-            <button className={`btn sm ${p.sleepAt ? 'on' : ''}`} onClick={() => setSleepOpen(o => !o)}>{p.sleepAt ? `☾ ${sleepLeft} min` : '☾ Sleep'}</button>
-            {sleepOpen && <div className="menu up" onClick={() => setSleepOpen(false)}>
-              {[5, 10, 15, 30, 45, 60].map(m => <button key={m} onClick={() => p.setSleep(m)}>{m} minutes</button>)}
-              {dur > 0 && <button onClick={() => p.setSleep(Math.ceil((dur - p.time) / p.rate / 60))}>End of episode</button>}
-              {p.sleepAt && <button onClick={() => p.setSleep(null)}>Off</button>}
-            </div>}
-          </div>
+          <div className="segmented sm pf-rates" role="radiogroup" aria-label="Speed">{RATES.map(r => <button key={r} type="button" role="radio" aria-checked={Math.abs(p.rate - r) < 0.01} className={Math.abs(p.rate - r) < 0.01 ? 'active' : ''} onClick={() => p.setRate(r)}>{r}×</button>)}</div>
+          <MenuButton label="Sleep timer" className={`btn sm ${p.sleepAt ? 'on' : ''}`} align="right" width={190} items={() => [
+            { heading: 'Stop playing after' },
+            ...[5, 10, 15, 30, 45, 60].map(m => ({ label: `${m} minutes`, onSelect: () => p.setSleep(m) })),
+            ...(dur > 0 ? [{ label: 'End of episode', onSelect: () => p.setSleep(Math.ceil((dur - p.time) / p.rate / 60)) }] : []),
+            ...(p.sleepAt ? ['sep' as const, { label: 'Off', icon: 'x', onSelect: () => p.setSleep(null) }] : []),
+          ] as MenuItem[]}><Icon name="moon" size={14} />{p.sleepAt ? `${sleepLeft} min` : 'Sleep'}</MenuButton>
         </div>
       </div>
     </div>
@@ -161,7 +161,7 @@ function RemoteBar() {
         </div>
       </Link>
       <div className="pb-controls">
-        <button className="btn sm remote-here" onClick={here} title={`Continue in this browser from ${clock(pos)}`}>▶ Continue here</button>
+        <button type="button" className="btn sm primary remote-here" onClick={here} title={`Continue in this browser from ${clock(pos)}`}><Icon name="play" size={13} />Continue here</button>
       </div>
     </div>
   )

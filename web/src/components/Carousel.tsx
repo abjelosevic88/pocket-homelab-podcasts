@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Icon } from './icons'
 
 /** A horizontal row without a scrollbar: ‹ › buttons appear on hover when
  *  there is more to see, and the side that continues fades out. Swipe,
@@ -27,8 +28,8 @@ export function Carousel({ children, className = '' }: { children: React.ReactNo
   return (
     <div className={`carousel ${edges.left ? 'more-left' : ''} ${edges.right ? 'more-right' : ''}`}>
       <div className={`carousel-track ${className}`} ref={track}>{children}</div>
-      {edges.left && <button className="carousel-btn left" onClick={() => page(-1)} aria-label="Scroll left">‹</button>}
-      {edges.right && <button className="carousel-btn right" onClick={() => page(1)} aria-label="Scroll right">›</button>}
+      {edges.left && <button type="button" className="carousel-btn left" onClick={() => page(-1)} aria-label="Scroll left"><Icon name="chevron-left" size={18} /></button>}
+      {edges.right && <button type="button" className="carousel-btn right" onClick={() => page(1)} aria-label="Scroll right"><Icon name="chevron-right" size={18} /></button>}
     </div>
   )
 }

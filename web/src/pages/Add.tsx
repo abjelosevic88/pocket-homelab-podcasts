@@ -5,7 +5,8 @@ import { useApp } from '../lib/app-context'
 import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel, YTItem } from '../lib/types'
 import { safeHTML } from '../components/Player'
 import { searchYouTube, YT_KINDS, type YTHit, type YTKind } from '../lib/youtube'
-import { Card, Empty, Field, Loading, Modal, PageHeader, Segmented, Tabs, useAsync, useDebounce, usePopover, useToast } from '../components/ui'
+import { Card, Empty, Field, Loading, MenuButton, Modal, PageHeader, Segmented, SettingRow, Switch, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { Artwork } from '../components/Artwork'
 import { clock, compact, fmtDate, fmtDur } from '../lib/format'
 
@@ -17,8 +18,8 @@ export default function Add() {
   // links like /add?tab=url&url=… land on this same page: follow the query string
   useEffect(() => { const t = sp.get('tab') as Tab | null; if (t) setTab(t) }, [sp])
   const { settings } = useApp()
-  const tabs: { id: Tab; label: string }[] = [{ id: 'search', label: 'Search' }, { id: 'url', label: 'Feed URL' }, { id: 'youtube', label: 'YouTube' }]
-  if (settings?.podcastindex_key || settings?.podcastindex_env) tabs.push({ id: 'trending', label: 'Trending' })
+  const tabs: { id: Tab; label: string; icon: string }[] = [{ id: 'search', label: 'Search', icon: 'search' }, { id: 'url', label: 'Feed URL', icon: 'rss' }, { id: 'youtube', label: 'YouTube', icon: 'youtube' }]
+  if (settings?.podcastindex_key || settings?.podcastindex_env) tabs.push({ id: 'trending', label: 'Trending', icon: 'activity' })
   return (
     <>
       <PageHeader title="Add" sub="Follow a podcast from a directory, by feed URL, or turn a YouTube channel into a podcast." />
@@ -42,10 +43,10 @@ function Search() {
   const hasPI = settings?.podcastindex_key || settings?.podcastindex_env
   return (
     <>
-      <div className="search-bar mb"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Podcast name, host, topic…" autoFocus />{loading && <span className="spinner" />}</div>
+      <div className="search-bar mb"><Icon name="search" size={17} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Podcast name, host, topic…" aria-label="Search podcasts" autoFocus />{loading && <span className="spinner" />}</div>
       <div className="row mb"><Segmented size="sm" value={source} onChange={setSource} options={[{ value: 'all', label: 'All' }, { value: 'itunes', label: 'Apple' }, ...(hasPI ? [{ value: 'podcastindex', label: 'Podcast Index' }] : [])]} />{!hasPI && <span className="muted small">Add a free Podcast Index key under Settings → Search for a second directory.</span>}</div>
-      {data?.warnings?.map(w => <div key={w} className="callout danger small mb">{w}</div>)}
-      {data && data.results.length === 0 && <Empty title="Nothing found">Try fewer words, or paste the feed URL.</Empty>}
+      {data?.warnings?.map(w => <div key={w} className="callout warn small mb"><Icon name="alert" size={15} /><span>{w}</span></div>)}
+      {data && data.results.length === 0 && <Empty title="Nothing found" icon="search">Try fewer words, or paste the feed URL.</Empty>}
       {data && <Results results={data.results} />}
       {dq.trim().length >= 2 && settings?.yt_dlp && <YouTubeMatches q={dq} />}
     </>
@@ -55,7 +56,7 @@ function Search() {
 function Trending() {
   const { data, loading, error } = useAsync(() => api.get<{ results: SearchResult[] }>(`${V1}/search/trending`), [])
   if (loading) return <Loading />
-  if (error) return <div className="callout danger">{error}</div>
+  if (error) return <div className="callout danger"><Icon name="alert" size={15} /><span>{error}</span></div>
   return <Results results={data?.results || []} />
 }
 
@@ -79,7 +80,7 @@ function Results({ results }: { results: SearchResult[] }) {
           </div>
           <div className="row" style={{ gap: 6, flexShrink: 0 }}>
             <Link className="btn sm" to={`/add?tab=url&url=${encodeURIComponent(r.feed_url)}`} title="See the episodes and take just one">Episodes</Link>
-            {r.subscribed_id ? <Link className="btn sm" to={`/podcasts/${r.subscribed_id}`}>✓ Following</Link> : <button className="btn primary sm" onClick={() => subscribe(r)} disabled={busy === r.feed_url}>{busy === r.feed_url ? 'Adding…' : '+ Follow'}</button>}
+            {r.subscribed_id ? <Link className="btn sm" to={`/podcasts/${r.subscribed_id}`}><Icon name="check" size={14} />Following</Link> : <button type="button" className="btn primary sm" onClick={() => subscribe(r)} disabled={busy === r.feed_url}>{busy === r.feed_url ? 'Adding…' : <><Icon name="plus" size={14} />Follow</>}</button>}
           </div>
         </li>
       ))}
@@ -127,8 +128,8 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
         <Card title={yt ? 'YouTube channel, playlist or video' : 'Feed URL'}>
           <form onSubmit={look} className="grid" style={{ gap: 12 }}>
             <p className="muted">{yt ? 'Paste a channel (@handle or /channel/UC…), a playlist (also unlisted) or a single video. Audio is downloaded on this box with yt-dlp; the newest uploads keep coming.' : 'Paste the RSS feed address of a podcast. Episodes stream from the publisher unless you download them.'}{!yt && ' A YouTube URL works here too.'}</p>
-            <div className="row"><input value={url} onChange={e => setUrl(e.target.value)} placeholder={yt ? 'https://www.youtube.com/@Fireship' : 'https://example.com/feed.xml'} spellCheck={false} autoFocus /><button className="btn primary" disabled={busy || !url.trim()}>{busy ? 'Looking…' : 'Look up'}</button></div>
-            {yt && !settings?.yt_dlp && <div className="callout danger small">yt-dlp is not available on this box, so YouTube cannot be added. See Settings → YouTube.</div>}
+            <div className="row"><input value={url} onChange={e => setUrl(e.target.value)} placeholder={yt ? 'https://www.youtube.com/@Fireship' : 'https://example.com/feed.xml'} spellCheck={false} autoFocus aria-label={yt ? 'YouTube URL' : 'Feed URL'} /><button type="submit" className="btn primary" disabled={busy || !url.trim()}>{busy ? 'Looking…' : 'Look up'}</button></div>
+            {yt && !settings?.yt_dlp && <div className="callout danger small"><Icon name="alert" size={15} /><span>yt-dlp is not available on this box, so YouTube cannot be added. See Settings → Feeds & downloads.</span></div>}
           </form>
         </Card>
         {preview && (preview.kind === 'youtube' || preview.kind === 'rss') && (
@@ -138,9 +139,9 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
                 <Field label="Videos to fetch now" help="The newest N. Every upload from now on is fetched automatically."><input type="number" min={0} max={200} value={opts.download_limit} onChange={e => setOpts({ ...opts, download_limit: Number(e.target.value) })} className="num" /></Field>
                 <Field label="Skip videos shorter than (s)" help="Keeps Shorts and clips out. 0 = everything."><input type="number" min={0} value={opts.min_duration} onChange={e => setOpts({ ...opts, min_duration: Number(e.target.value) })} className="num" /></Field>
                 <Field label="Only titles matching" help="Regular expression, optional."><input value={opts.title_filter} onChange={e => setOpts({ ...opts, title_filter: e.target.value })} spellCheck={false} /></Field>
-              </> : <label className="row"><input type="checkbox" checked={opts.auto_download} onChange={e => setOpts({ ...opts, auto_download: e.target.checked })} style={{ width: 'auto' }} /> Download new episodes automatically</label>}
+              </> : <SettingRow title="Download new episodes automatically"><Switch checked={opts.auto_download} onChange={v => setOpts({ ...opts, auto_download: v })} label="Download new episodes automatically" /></SettingRow>}
               <Field label="Keep files for (days)" help="0 = until you delete them. Saved and queued episodes always stay."><input type="number" min={0} value={opts.retention_days} onChange={e => setOpts({ ...opts, retention_days: Number(e.target.value) })} className="num" /></Field>
-              <label className="row"><input type="checkbox" checked={opts.notify} onChange={e => setOpts({ ...opts, notify: e.target.checked })} style={{ width: 'auto' }} /> Notify me about new episodes</label>
+              <SettingRow title="Notify me about new episodes"><Switch checked={opts.notify} onChange={v => setOpts({ ...opts, notify: v })} label="Notify me about new episodes" /></SettingRow>
             </div>
           </Card>
         )}
@@ -161,12 +162,12 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
               <PreviewEpisodes preview={preview} picked={picked} onPick={pick} />
             )}
             <div className="form-actions mt">
-              {preview.subscribed_id ? <Link className="btn" to={`/podcasts/${preview.subscribed_id}`}>✓ Already following — open</Link> : <button className="btn primary lg" onClick={subscribe} disabled={busy}>{busy ? 'Adding…' : preview.kind === 'video' ? '↓ Download as episode' : '+ Subscribe'}</button>}
+              {preview.subscribed_id ? <Link className="btn" to={`/podcasts/${preview.subscribed_id}`}><Icon name="check" size={15} />Already following — open</Link> : <button type="button" className="btn primary lg" onClick={subscribe} disabled={busy}>{busy ? 'Adding…' : preview.kind === 'video' ? <><Icon name="download" size={16} />Download as episode</> : <><Icon name="plus" size={16} />Subscribe</>}</button>}
             </div>
           </Card>
         ) : (
           <Card title="Tips">
-            <ul className="muted" style={{ paddingLeft: 18, margin: 0, display: 'grid', gap: 6 }}>
+            <ul className="tips">
               {yt ? <>
                 <li>A channel subscription fetches the newest videos now and every upload after that.</li>
                 <li>Unlisted playlists work: make a “Watch later” playlist, paste its link, and whatever you add appears here as audio.</li>
@@ -175,7 +176,7 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
                 <li>Every subscription gets a public RSS feed (Settings → Feeds) for Apple Podcasts, Overcast or AntennaPod.</li>
               </> : <>
                 <li>Most podcast pages link their RSS feed; Apple Podcasts links can be searched by name on the Search tab.</li>
-                <li>Want one episode only (a guest you like, one talk)? Look the feed up and press <b>↓ Get</b> next to it: it lands in your “Picks” show, downloaded, without following the whole podcast. Search results have an <b>Episodes</b> button for the same.</li>
+                <li>Want one episode only (a guest you like, one talk)? Look the feed up and press <b>Get</b> next to it: it lands in your “Picks” show, downloaded, without following the whole podcast. Search results have an <b>Episodes</b> button for the same.</li>
                 <li>Private feeds with a token in the URL work as they are.</li>
                 <li>Import a whole OPML file under Settings → Backup & data.</li>
               </>}
@@ -209,8 +210,8 @@ function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Previ
   const key = (e: PreviewEpisode, i: number) => e.guid || String(i)
   const get = (e: PreviewEpisode) => {
     if (!e.guid || e.has_audio === false) return null
-    if (picked[e.guid] === 'done') return <span className="badge ok-badge">✓ in Picks</span>
-    return <button className="btn sm" onClick={ev => { ev.stopPropagation(); onPick(e.guid!, e.title) }} disabled={picked[e.guid] === 'busy'} title="Download just this one into your Picks">{picked[e.guid] === 'busy' ? '…' : '↓ Get'}</button>
+    if (picked[e.guid] === 'done') return <span className="badge ok">in Picks</span>
+    return <button type="button" className="btn sm" onClick={ev => { ev.stopPropagation(); onPick(e.guid!, e.title) }} disabled={picked[e.guid] === 'busy'} title="Download just this one into your Picks">{picked[e.guid] === 'busy' ? '…' : <><Icon name="download" size={14} />Get</>}</button>
   }
   return (
     <div className="pv mt">
@@ -225,14 +226,14 @@ function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Previ
                 <Artwork src={e.image || preview.image} title={e.title} size="xs" />
                 <span className="pv-info"><span className="pv-title" title={e.title}>{e.title}</span><span className="muted small">{meta}</span></span>
                 {get(e)}
-                <span className={`pv-chev ${isOpen ? 'up' : ''}`} aria-hidden>⌄</span>
+                <span className={`pv-chev ${isOpen ? 'up' : ''}`} aria-hidden><Icon name="chevron-down" size={16} /></span>
               </div>
               {isOpen && (
                 <div className="pv-detail">
                   <div className="pv-detail-top">
                     <Artwork src={e.image || preview.image} title={e.title} size="md" />
                     <div className="pv-detail-head">
-                      {e.link && <a className="small" href={e.link} target="_blank" rel="noreferrer">{yt ? 'Watch on YouTube ↗' : 'Open the episode page ↗'}</a>}
+                      {e.link && <a className="small row" style={{ gap: 5 }} href={e.link} target="_blank" rel="noreferrer"><Icon name="external" size={13} />{yt ? 'Watch on YouTube' : 'Open the episode page'}</a>}
                       {!yt && e.audio && <audio className="pv-audio" controls preload="none" src={e.audio} />}
                       {!yt && e.audio && <span className="muted small">Listen to a bit before you get it — streams from the publisher.</span>}
                     </div>
@@ -244,12 +245,12 @@ function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Previ
           )
         })}
       </ul>
-      {!infinite && !showAll && !q && eps.length > 8 && <button className="btn ghost sm" onClick={() => setShowAll(true)}>Show {eps.length - 8} more{preview.episode_count && preview.episode_count > eps.length ? ` (of ${preview.episode_count})` : ''}</button>}
+      {!infinite && !showAll && !q && eps.length > 8 && <button type="button" className="btn ghost sm" onClick={() => setShowAll(true)}>Show {eps.length - 8} more{preview.episode_count && preview.episode_count > eps.length ? ` (of ${preview.episode_count})` : ''}</button>}
       {infinite && !q && (
         <div ref={sentinel} className="pv-more">
-          {infinite.error ? <><span className="bad small">{infinite.error}</span> <button className="btn ghost sm" onClick={infinite.onMore}>Try again</button></>
+          {infinite.error ? <><span className="bad small">{infinite.error}</span> <button type="button" className="btn ghost sm" onClick={infinite.onMore}>Try again</button></>
             : infinite.loading ? <><span className="spinner sm" /> Loading older videos…</>
-            : infinite.more ? <button className="btn ghost sm" onClick={infinite.onMore}>Load more</button>
+            : infinite.more ? <button type="button" className="btn ghost sm" onClick={infinite.onMore}>Load more</button>
             : <span className="muted small">That's all {eps.length} videos.</span>}
         </div>
       )}
@@ -264,23 +265,19 @@ function YouTubeSearch() {
   const kind = (YT_KINDS.some(k => k.value === sp.get('yt')) ? sp.get('yt') : 'all') as YTKind
   const [q, setQ] = useState(sp.get('q') || '')
   const dq = useDebounce(q, 450)
-  const pop = usePopover()
   const { data, loading } = useAsync(async () => dq.trim().length < 2 ? null : searchYouTube(dq.trim(), kind), [dq, kind])
-  const setKind = (k: YTKind) => { const n = new URLSearchParams(sp); if (k === 'all') n.delete('yt'); else n.set('yt', k); n.delete('url'); setSp(n, { replace: true }); pop.setOpen(false) }
+  const setKind = (k: YTKind) => { const n = new URLSearchParams(sp); if (k === 'all') n.delete('yt'); else n.set('yt', k); n.delete('url'); setSp(n, { replace: true }) }
   if (!settings?.yt_dlp) return null
   const current = YT_KINDS.find(k => k.value === kind)!
   return (
     <div className="mb">
       <div className="yts-top">
-        <div className="search-bar grow"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder={kind === 'all' ? 'Search YouTube…' : `Search YouTube ${current.label.toLowerCase()}…`} autoFocus={!sp.get('url')} />{loading && dq.trim().length >= 2 && <span className="spinner" />}</div>
-        <div className="menu-wrap" ref={pop.ref}>
-          <button className={`btn yts-kind ${kind !== 'all' ? 'on' : ''}`} onClick={() => pop.setOpen(o => !o)} aria-haspopup="menu" aria-expanded={pop.open}>{current.label} <span className="muted" aria-hidden>▾</span></button>
-          {pop.open && <div className="menu" role="menu">{YT_KINDS.map(k => <button key={k.value} role="menuitemradio" aria-checked={k.value === kind} className={k.value === kind ? 'cur' : ''} onClick={() => setKind(k.value)}>{k.value === kind ? '✓ ' : ''}{k.label}</button>)}</div>}
-        </div>
+        <div className="search-bar grow"><Icon name="search" size={17} /><input aria-label="Search YouTube" value={q} onChange={e => setQ(e.target.value)} placeholder={kind === 'all' ? 'Search YouTube…' : `Search YouTube ${current.label.toLowerCase()}…`} autoFocus={!sp.get('url')} />{loading && dq.trim().length >= 2 && <span className="spinner" />}</div>
+        <MenuButton label={`Show: ${current.label}`} className={`btn yts-kind ${kind !== 'all' ? 'on' : ''}`} align="right" width={180} items={YT_KINDS.map(k => ({ label: k.label, checked: k.value === kind, onSelect: () => setKind(k.value) }))}>{current.label}<Icon name="chevron-down" size={14} className="muted" /></MenuButton>
       </div>
       {data && data.length === 0 && <p className="muted">Nothing found.</p>}
       {data && data.length > 0 && <YouTubeResults hits={data} />}
-      {!data && <p className="muted small">Find channels, videos and playlists. Subscribe to a channel or playlist and new uploads download automatically; <b>↓ Get</b> takes a single video as audio into your Picks. Or paste a link below.</p>}
+      {!data && <p className="muted small">Find channels, videos and playlists. Subscribe to a channel or playlist and new uploads download automatically; <b>Get</b> takes a single video as audio into your Picks. Or paste a link below.</p>}
     </div>
   )
 }
@@ -313,11 +310,11 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
                 {!compactList && c.description && <div className="muted small clamp2">{c.description}</div>}
               </div>
               <div className="row yt-actions">
-                <button className="btn sm" onClick={() => setPeek({ key: h.key, url: c.url, title: c.title })} title="See the latest videos first">Videos</button>
+                <button type="button" className="btn sm" onClick={() => setPeek({ key: h.key, url: c.url, title: c.title })} title="See the latest videos first">Videos</button>
                 {typeof sub === 'number'
-                  ? <Link className="btn sm" to={`/podcasts/${sub}`}>✓ Following</Link>
-                  : <button className="btn primary sm" disabled={sub === 'busy'} title="New uploads will download automatically"
-                      onClick={() => run(h.key, () => api.post<Podcast>(`${V1}/podcasts`, { url: c.url }), () => `Subscribed to ${c.title} — the newest videos are downloading`)}>{sub === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
+                  ? <Link className="btn sm" to={`/podcasts/${sub}`}><Icon name="check" size={14} />Following</Link>
+                  : <button type="button" className="btn primary sm" disabled={sub === 'busy'} title="New uploads will download automatically"
+                      onClick={() => run(h.key, () => api.post<Podcast>(`${V1}/podcasts`, { url: c.url }), () => `Subscribed to ${c.title} — the newest videos are downloading`)}>{sub === 'busy' ? 'Subscribing…' : <><Icon name="plus" size={14} />Subscribe</>}</button>}
               </div>
             </li>
           )
@@ -329,7 +326,7 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
           <li key={h.key} className="yt-video">
             <a className="yt-thumb" href={v.url} target="_blank" rel="noreferrer" title="Open on YouTube">
               <img src={v.thumbnail} alt="" loading="lazy" />
-              {isVideo ? (v.duration ? <span className="yt-dur">{clock(v.duration)}</span> : v.live ? <span className="yt-dur live">LIVE</span> : null) : <span className="yt-dur">☰</span>}
+              {isVideo ? (v.duration ? <span className="yt-dur">{clock(v.duration)}</span> : v.live ? <span className="yt-dur live">LIVE</span> : null) : <span className="yt-dur"><Icon name="list" size={12} /></span>}
             </a>
             <div className="info">
               <div className="yt-kind-row"><span className={`yt-badge ${h.kind}`}>{YT_LABEL[h.kind]}</span></div>
@@ -340,15 +337,15 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
             <div className="row yt-actions">
               {isVideo
                 ? (typeof have === 'number'
-                    ? <Link className="btn sm" to={`/episodes/${have}`}>✓ In library</Link>
-                    : <button className="btn primary sm" disabled={have === 'busy' || v.live} title="Download as audio into your Picks"
-                        onClick={() => run(h.key, () => api.post<{ id: number }>(`${V1}/youtube/video`, { url: v.url }), () => `“${v.title}” is downloading into your Picks`)}>{have === 'busy' ? 'Adding…' : '↓ Get'}</button>)
+                    ? <Link className="btn sm" to={`/episodes/${have}`}><Icon name="check" size={14} />In library</Link>
+                    : <button type="button" className="btn primary sm" disabled={have === 'busy' || v.live} title="Download as audio into your Picks"
+                        onClick={() => run(h.key, () => api.post<{ id: number }>(`${V1}/youtube/video`, { url: v.url }), () => `“${v.title}” is downloading into your Picks`)}>{have === 'busy' ? 'Adding…' : <><Icon name="download" size={14} />Get</>}</button>)
                 : <>
-                    <button className="btn sm" onClick={() => setPeek({ key: h.key, url: v.url, title: v.title })} title="See its videos first">Videos</button>
+                    <button type="button" className="btn sm" onClick={() => setPeek({ key: h.key, url: v.url, title: v.title })} title="See its videos first">Videos</button>
                     {typeof have === 'number'
-                      ? <Link className="btn sm" to={`/podcasts/${have}`}>✓ Following</Link>
-                      : <button className="btn primary sm" disabled={have === 'busy'}
-                          onClick={() => run(h.key, () => api.post<Podcast>(`${V1}/podcasts`, { url: v.url }), () => `Subscribed to ${v.title} — the newest videos are downloading`)}>{have === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
+                      ? <Link className="btn sm" to={`/podcasts/${have}`}><Icon name="check" size={14} />Following</Link>
+                      : <button type="button" className="btn primary sm" disabled={have === 'busy'}
+                          onClick={() => run(h.key, () => api.post<Podcast>(`${V1}/podcasts`, { url: v.url }), () => `Subscribed to ${v.title} — the newest videos are downloading`)}>{have === 'busy' ? 'Subscribing…' : <><Icon name="plus" size={14} />Subscribe</>}</button>}
                   </>}
             </div>
           </li>
@@ -395,7 +392,7 @@ export function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: 
   }
   return (
     <Modal title={preview?.title || title} onClose={onClose} size="lg">
-      {loading && !preview ? <Loading /> : error ? <div className="callout danger">{error}</div> : preview && (
+      {loading && !preview ? <Loading /> : error ? <div className="callout danger"><Icon name="alert" size={15} /><span>{error}</span></div> : preview && (
         <div className="grid" style={{ gap: 14 }}>
           <div className="peek-head">
             <Artwork src={preview.image} title={preview.title} size="md" className={preview.youtube_kind === 'channel' ? 'round' : ''} />
@@ -406,10 +403,10 @@ export function SourcePeek({ url, title, subscribedID, onSubscribed, onClose }: 
               {preview.description && <span className="muted small clamp2">{preview.description}</span>}
             </div>
             <div className="row" style={{ gap: 6, flexShrink: 0, alignSelf: 'center' }}>
-              <a className="btn sm ghost" href={url} target="_blank" rel="noreferrer">YouTube ↗</a>
+              <a className="btn sm ghost" href={url} target="_blank" rel="noreferrer"><Icon name="external" size={14} />YouTube</a>
               {typeof sub === 'number'
-                ? <Link className="btn sm" to={`/podcasts/${sub}`} onClick={onClose}>✓ Following</Link>
-                : <button className="btn primary sm" onClick={subscribe} disabled={sub === 'busy'} title="New uploads will download automatically">{sub === 'busy' ? 'Subscribing…' : '+ Subscribe'}</button>}
+                ? <Link className="btn sm" to={`/podcasts/${sub}`} onClick={onClose}><Icon name="check" size={14} />Following</Link>
+                : <button type="button" className="btn primary sm" onClick={subscribe} disabled={sub === 'busy'} title="New uploads will download automatically">{sub === 'busy' ? 'Subscribing…' : <><Icon name="plus" size={14} />Subscribe</>}</button>}
             </div>
           </div>
           {all && all.episodes.length > 0
@@ -428,7 +425,7 @@ function YouTubeMatches({ q }: { q: string }) {
   if (!data || data.length === 0) return null
   return (
     <section className="mt">
-      <h2 className="yt-head"><span className="yt-dot">▶</span> On YouTube <Link className="muted small" to={`/add?tab=youtube&q=${encodeURIComponent(q)}`}>more →</Link></h2>
+      <h2 className="yt-head"><span className="yt-dot"><Icon name="play" size={9} /></span> On YouTube <Link className="see-all" to={`/add?tab=youtube&q=${encodeURIComponent(q)}`}>More<Icon name="chevron-right" size={14} /></Link></h2>
       <YouTubeResults hits={data} compactList />
     </section>
   )

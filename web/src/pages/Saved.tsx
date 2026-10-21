@@ -9,7 +9,7 @@ export default function Saved() {
   return (
     <>
       <PageHeader title="Saved" sub="Episodes you keep. Their files are never removed by retention." />
-      <EpisodeList episodes={(data || []).filter(e => e.saved)} onChange={setData} empty={<Empty title="Nothing saved">♡ on an episode keeps it here.</Empty>} />
+      <EpisodeList episodes={(data || []).filter(e => e.saved)} onChange={setData} empty={<Empty title="Nothing saved" icon="heart">“Save for later” in an episode's menu keeps it here.</Empty>} />
     </>
   )
 }
