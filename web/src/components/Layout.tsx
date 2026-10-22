@@ -9,6 +9,7 @@ import { Player } from './Player'
 import { CommandPalette, isMac, openPalette } from './CommandPalette'
 import { ShortcutsSheet } from './ShortcutsSheet'
 import { Avatar, type MenuItem, MenuButton, modalOpen, useIsMobile, useMediaQuery } from './ui'
+import { AskButton } from './AskButton'
 
 const SIDEBAR_KEY = 'pp-sidebar'
 
@@ -124,6 +125,7 @@ function TopBar({ onMenu, mobile, compact, sidebarOpen, crumb }: { onMenu: () =>
       <button type="button" className="btn ghost topbar-search" onClick={openPalette} aria-label="Search" title={`Search everything (${isMac ? '⌘' : 'Ctrl'}K or /)`}>
         <Icon name="search" size={17} /><span className="topbar-search-label">Search</span><kbd className="topbar-search-kbd">{isMac ? '⌘' : 'Ctrl'} K</kbd>
       </button>
+      {mobile && <AskButton />}
       <MenuButton label="Account" className="avatar-btn" align="right" width={220} items={avatarMenu}>
         <Avatar name={user?.name} email={user?.email} size={30} />
       </MenuButton>
