@@ -27,6 +27,7 @@ var notesUse = core.Use{App: "notes", Scopes: []string{"notes:read"}, Reason: "Y
 type notesBox struct {
 	Available bool       `json:"available"`
 	Missing   bool       `json:"missing,omitempty"` // no Pocket Notes here at all: the page shows no box
+	NoCore    bool       `json:"no_core,omitempty"` // missing because this server has no Pocket Core: the page shows the box greyed
 	Reason    string     `json:"reason,omitempty"`
 	Notes     []noteLink `json:"notes"`
 	NewURL    string     `json:"new_url,omitempty"`
@@ -51,6 +52,7 @@ func (s *Server) notesAbout(ctx context.Context, email, item, title, label, fold
 	box := notesBox{Notes: []noteLink{}}
 	if !s.core.Configured() || s.cfg.BaseURL == "" {
 		box.Missing, box.Reason = true, "Notes come from Pocket Notes through Pocket Core, which this Pocket Podcasts is not joined to."
+		box.NoCore = !s.core.Configured()
 		return box
 	}
 	lt, err := s.core.ActAs(ctx, email, "notes", "notes:read")

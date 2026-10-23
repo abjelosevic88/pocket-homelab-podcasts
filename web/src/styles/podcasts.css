@@ -312,6 +312,9 @@ a.stat:hover { border-color: var(--border-strong); box-shadow: var(--shadow); te
 /* Notes about an episode, from Pocket Notes */
 .notes-panel h3 .spacer { flex: 1; }
 .notes-panel h3 .btn { font-size: 12px; }
+/* a choice that only works through Pocket Core, on a server without one */
+.core-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.core-hint a { color: inherit; text-decoration: underline; }
 .notes-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .notes-list a { display: grid; gap: 1px; padding: 7px 8px; margin: 0 -8px; border-radius: 8px; color: var(--text); }
 .notes-list a:hover { background: var(--hover); text-decoration: none; }

@@ -1,15 +1,16 @@
 import { api } from '../lib/api'
 import { clock } from '../lib/format'
-import { useAsync } from './ui'
+import { NeedsCore, useAsync } from './ui'
 import { Icon } from './icons'
 
 // Your notes about this episode, from Pocket Notes (notes there that link to its page), and a
-// way to start one at the moment you are at. Shows nothing where there is no Pocket Notes to
-// link to (no Pocket Core, as when Pocket Podcasts runs on its own); greyed out, saying what to
-// switch on, where the link is off.
+// way to start one at the moment you are at. Greyed out with what Pocket Core is where Pocket
+// Podcasts runs on its own; shows nothing where Core has no Pocket Notes; greyed out, saying
+// what to switch on, where the link is off.
 interface NotesBox {
   available: boolean
   missing?: boolean
+  no_core?: boolean
   reason?: string
   notes: { id: number; title: string; folder: string; excerpt: string; modified: number; url: string }[]
   new_url?: string
@@ -29,7 +30,7 @@ function atMoment(newURL: string, at: number): string {
 
 export function NotesPanel({ src, at }: { src: string; at: number }) {
   const { data } = useAsync(() => api.get<NotesBox>(src), [src])
-  if (!data || data.missing) return null
+  if (!data || (data.missing && !data.no_core)) return null
   const label = <><Icon name="plus" size={14} />{at >= 5 ? `Note at ${clock(at)}` : 'New note'}</>
   return (
     <div className="epx-panel notes-panel">
@@ -39,7 +40,8 @@ export function NotesPanel({ src, at }: { src: string; at: number }) {
           ? <a className="btn ghost sm" href={atMoment(data.new_url, at)} target="_blank" rel="noreferrer" title="Opens Pocket Notes with a note linked to this episode, at this moment">{label}</a>
           : <span title={data.reason}><button type="button" className="btn ghost sm" disabled aria-disabled>{label}</button></span>}
       </h3>
-      {!data.available ? <p className="muted small row top"><Icon name="lock" size={14} />{data.reason}</p>
+      {data.no_core ? <NeedsCore what="Notes come from Pocket Notes, through Pocket Core." />
+        : !data.available ? <p className="muted small row top"><Icon name="lock" size={14} />{data.reason}</p>
         : data.notes.length === 0 ? <p className="muted small">No notes about this episode yet. Start one at the moment you are at; any note that links to this page shows up here.</p>
         : <ul className="notes-list">{data.notes.map(n => (
             <li key={n.id}><a href={n.url} target="_blank" rel="noreferrer">
