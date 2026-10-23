@@ -1,6 +1,13 @@
 <p align="center"><img src="web/public/favicon.svg" width="72" alt=""></p>
 <h1 align="center">Pocket Podcasts</h1>
 <p align="center">A self-hosted podcast server that also turns YouTube channels into podcasts.<br>One Go binary, one SQLite file, one volume.</p>
+<p align="center">
+  <a href="https://github.com/abjelosevic88/pocket-homelab-podcasts/actions"><img src="https://github.com/abjelosevic88/pocket-homelab-podcasts/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/abjelosevic88/pocket-homelab-podcasts/pkgs/container/pocket-homelab-podcasts"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64-blue" alt="image"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"></a>
+</p>
+
+---
 
 Pocket Podcasts keeps your subscriptions, plays them in the browser (and remembers where you stopped on every device), downloads episodes to your box, follows YouTube channels and playlists as audio podcasts with SponsorBlock, and publishes every subscription as a normal RSS feed so Apple Podcasts, Overcast or AntennaPod can play it too.
 
