@@ -32,6 +32,7 @@ var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/podcasts$`), "podcasts:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/podcasts/\d+$`), "podcasts:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/history$`), "history:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/listens(/dates)?$`), "history:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/stats$`), "history:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/dashboard$`), "history:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/episodes$`), "history:read"},

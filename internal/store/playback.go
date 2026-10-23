@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -10,20 +13,47 @@ import (
 // SaveProgress stores where a person is in an episode and adds listened
 // seconds to today's listening. completed marks the episode played.
 func (s *Store) SaveProgress(ctx context.Context, userID, episodeID int64, position, listened int, completed bool, after ...func(*sql.Tx, bool, bool) error) error {
+	_, err := s.SaveProgressReport(ctx, userID, episodeID, position, listened, completed, "", time.Now(), after...)
+	return err
+}
+
+// SaveProgressReport atomically receipts a report and applies its listening delta.
+// A delayed report adds to its original day without rewinding newer progress.
+// The caller must keep both the report ID and payload unchanged when retrying.
+func (s *Store) SaveProgressReport(ctx context.Context, userID, episodeID int64, position, listened int, completed bool, reportID string, at time.Time, after ...func(*sql.Tx, bool, bool) error) (bool, error) {
 	if !s.ownsEpisode(ctx, userID, episodeID) {
-		return ErrNotFound
+		return false, ErrNotFound
 	}
-	now := Now()
+	now := at.UTC().Format(time.RFC3339Nano)
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback() //nolint:errcheck
+	if reportID != "" {
+		body, _ := json.Marshal([]any{episodeID, position, listened, completed, now})
+		hash := fmt.Sprintf("%x", sha256.Sum256(body))
+		var old string
+		err := tx.QueryRowContext(ctx, `SELECT payload_hash FROM listening_reports WHERE user_id=? AND report_id=?`, userID, reportID).Scan(&old)
+		if err == nil {
+			if old != hash {
+				return false, ErrConflict
+			}
+			return false, nil
+		}
+		if err != sql.ErrNoRows {
+			return false, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO listening_reports(user_id,report_id,payload_hash) VALUES(?,?,?)`, userID, reportID, hash); err != nil {
+			return false, err
+		}
+	}
+
 	var wasPlayed string
 	var wasDone int
 	err = tx.QueryRowContext(ctx, `SELECT last_played_at,completed FROM progress WHERE user_id=? AND episode_id=?`, userID, episodeID).Scan(&wasPlayed, &wasDone)
 	if err != nil && err != sql.ErrNoRows {
-		return err
+		return false, err
 	}
 
 	var played int
@@ -36,30 +66,37 @@ func (s *Store) SaveProgress(ctx context.Context, userID, episodeID int64, posit
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO progress (user_id, episode_id, position, completed, listened, play_count, last_played_at, completed_at)
 		VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-		ON CONFLICT(user_id, episode_id) DO UPDATE SET position = excluded.position,
-		  completed = CASE WHEN excluded.completed = 1 THEN 1 ELSE progress.completed END,
-		  completed_at = CASE WHEN excluded.completed = 1 AND progress.completed = 0 THEN excluded.completed_at ELSE progress.completed_at END,
+		ON CONFLICT(user_id, episode_id) DO UPDATE SET position = CASE WHEN julianday(excluded.last_played_at) >= julianday(progress.last_played_at) OR progress.last_played_at = '' THEN excluded.position ELSE progress.position END,
+		  completed = CASE WHEN excluded.completed = 1 AND (progress.last_played_at = '' OR julianday(excluded.last_played_at) >= julianday(progress.last_played_at)) THEN 1 ELSE progress.completed END,
+		  completed_at = CASE WHEN excluded.completed = 1 AND progress.completed = 0 AND (progress.last_played_at = '' OR julianday(excluded.last_played_at) >= julianday(progress.last_played_at)) THEN excluded.completed_at ELSE progress.completed_at END,
 		  listened = progress.listened + excluded.listened,
-		  play_count = progress.play_count + CASE WHEN progress.last_played_at < strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 minutes') THEN ? ELSE 0 END,
-		  last_played_at = excluded.last_played_at`,
+		  play_count = progress.play_count + CASE WHEN julianday(progress.last_played_at) < julianday(excluded.last_played_at) - 30.0/1440 THEN ? ELSE 0 END,
+		  last_played_at = CASE WHEN progress.last_played_at = '' OR julianday(excluded.last_played_at) >= julianday(progress.last_played_at) THEN excluded.last_played_at ELSE progress.last_played_at END`,
 		userID, episodeID, position, boolInt(completed), listened, now, completedAt, played); err != nil {
-		return err
+		return false, err
 	}
 	if listened > 0 {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO listens (user_id, episode_id, day, seconds) VALUES (?, ?, ?, ?)
-			ON CONFLICT(user_id, episode_id, day) DO UPDATE SET seconds = listens.seconds + excluded.seconds`, userID, episodeID, Today(), listened); err != nil {
-			return err
+		if _, err := tx.ExecContext(ctx, `INSERT INTO listens (user_id, episode_id, day, seconds, first_at, last_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+ ON CONFLICT(user_id, episode_id, day) DO UPDATE SET seconds = listens.seconds + excluded.seconds, updated_at=excluded.updated_at,
+ first_at = CASE WHEN listens.first_at='' OR julianday(excluded.first_at)<julianday(listens.first_at) THEN excluded.first_at ELSE listens.first_at END,
+ last_at = CASE WHEN listens.last_at='' OR julianday(excluded.last_at)>julianday(listens.last_at) THEN excluded.last_at ELSE listens.last_at END`, userID, episodeID, at.In(time.Local).Format("2006-01-02"), listened, now, now, Now()); err != nil {
+			return false, err
 		}
 	}
 	for _, hook := range after {
 		if hook != nil {
-			if err := hook(tx, wasPlayed == "" && listened > 0, completed && wasDone == 0); err != nil {
-				return err
+			if err := hook(tx, wasPlayed == "" && listened > 0, completed && wasDone == 0 && (wasPlayed == "" || !at.Before(parseProgressTime(wasPlayed)))); err != nil {
+				return false, err
 			}
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
+
+func parseProgressTime(s string) time.Time { t, _ := time.Parse(time.RFC3339Nano, s); return t }
 
 // SetCompleted marks an episode played (position at the end) or unplayed.
 func (s *Store) SetCompleted(ctx context.Context, userID, episodeID int64, completed bool, after ...func(*sql.Tx, bool, bool) error) error {

@@ -285,15 +285,26 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Position  int    `json:"position"`
-		Listened  int    `json:"listened"`
-		Duration  int    `json:"duration"`
-		Completed *bool  `json:"completed"`
-		Client    string `json:"client"` // a browser tab's id, so it can tell its own session from others
+		Position   int    `json:"position"`
+		Listened   int    `json:"listened"`
+		Duration   int    `json:"duration"`
+		Completed  *bool  `json:"completed"`
+		ReportID   string `json:"report_id"`
+		ListenedAt string `json:"listened_at"`
+		Client     string `json:"client"` // a browser tab's id, so it can tell its own session from others
 	}
 	if err := decode(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
+	}
+	at := time.Now()
+	if in.ReportID != "" || in.ListenedAt != "" {
+		var err error
+		at, err = time.Parse(time.RFC3339Nano, in.ListenedAt)
+		if err != nil || in.Completed == nil || at.IsZero() || at.After(time.Now().Add(5*time.Minute)) || strings.TrimSpace(in.ReportID) == "" || len(in.ReportID) > 128 || in.Listened < 0 || in.Listened > 3600 || in.Position < 0 || in.Position > 86400*7 {
+			writeErr(w, http.StatusBadRequest, "dated progress requires completed, a report_id (1–128 characters), RFC3339 listened_at no more than 5 minutes in the future, position 0–604800 and listened 0–3600")
+			return
+		}
 	}
 	in.Position = clampInt(in.Position, 0, 86400*7)
 	in.Listened = clampInt(in.Listened, 0, 3600)
@@ -307,8 +318,26 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 		completed = true
 	}
 	wasDone := e.Completed
-	if err := s.store.SaveProgress(ctx, me(r), e.ID, in.Position, in.Listened, completed, s.progressEvent(ctx, me(r), e, false)); err != nil {
+	applied, err := s.store.SaveProgressReport(ctx, me(r), e.ID, in.Position, in.Listened, completed, in.ReportID, at, s.progressEvent(ctx, me(r), e, false))
+	if errors.Is(err, store.ErrConflict) {
+		writeErr(w, http.StatusConflict, "report_id was already used with a different payload")
+		return
+	}
+	if err != nil {
 		s.fail(w, err, "save progress")
+		return
+	}
+	if in.ReportID != "" {
+		current, err := s.store.GetEpisode(ctx, me(r), e.ID)
+		if err != nil {
+			s.fail(w, err, "read progress")
+			return
+		}
+		// Only a fresh report for the current position is a live playback signal.
+		if applied && time.Since(at) >= 0 && time.Since(at) < 30*time.Second && current.PlayPosition == in.Position {
+			s.trackPlayback(r, me(r), e, in.Position, in.Listened, current.Completed, strings.TrimSpace(in.Client))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"position": current.PlayPosition, "completed": current.Completed, "applied": applied, "report_id": in.ReportID})
 		return
 	}
 	s.trackPlayback(r, me(r), e, in.Position, in.Listened, completed, strings.TrimSpace(in.Client))

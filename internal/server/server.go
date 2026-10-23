@@ -257,6 +257,8 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/queue", s.handleQueueClear)
 			r.Get("/queue/next", s.handleQueueNext)
 			r.Get("/history", s.handleHistory)
+			r.Get("/listens", s.handleListens)
+			r.Get("/listens/dates", s.handleListeningDates)
 			r.Delete("/history", s.handleClearHistory)
 			r.Get("/saved", s.handleSaved)
 			r.Get("/downloads", s.handleDownloads)
