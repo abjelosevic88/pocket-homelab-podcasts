@@ -419,12 +419,47 @@ func (s *Store) TrimEpisodes(ctx context.Context, podcastID int64, keep int) err
 
 // DeleteEpisode removes one episode (YouTube videos the person does not want).
 func (s *Store) DeleteEpisode(ctx context.Context, userID, id int64) (string, error) {
-	var file string
-	if err := s.DB.QueryRowContext(ctx, `SELECT e.file_path FROM episodes e JOIN podcasts p ON p.id = e.podcast_id WHERE e.id = ? AND p.user_id = ?`, id, userID).Scan(&file); err != nil {
+	var file, guid string
+	var podcast int64
+	if err := s.DB.QueryRowContext(ctx, `SELECT e.file_path, e.guid, e.podcast_id FROM episodes e JOIN podcasts p ON p.id = e.podcast_id WHERE e.id = ? AND p.user_id = ?`, id, userID).Scan(&file, &guid, &podcast); err != nil {
 		return "", notFound(err)
 	}
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM episodes WHERE id = ?`, id)
-	return file, err
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	// remembered, so the next refresh of a followed feed does not bring it back
+	if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO removed_episodes (podcast_id, guid, removed_at) VALUES (?, ?, ?)`, podcast, guid, Now()); err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM episodes WHERE id = ?`, id); err != nil {
+		return "", err
+	}
+	return file, tx.Commit()
+}
+
+// RemovedGUIDs are the episodes of a subscription its owner removed.
+func (s *Store) RemovedGUIDs(ctx context.Context, podcastID int64) (map[string]bool, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT guid FROM removed_episodes WHERE podcast_id = ?`, podcastID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			return nil, err
+		}
+		out[g] = true
+	}
+	return out, rows.Err()
+}
+
+// Unremove clears a removal: the person got that episode again on purpose.
+func (s *Store) Unremove(ctx context.Context, podcastID int64, guid string) {
+	_, _ = s.DB.ExecContext(ctx, `DELETE FROM removed_episodes WHERE podcast_id = ? AND guid = ?`, podcastID, guid)
 }
 
 // LatestEpisodeDate is the newest pub_date of a subscription.

@@ -163,6 +163,10 @@ func (s *Server) refreshRSS(ctx context.Context, p *store.Podcast, first bool) (
 	}
 	subscribed := store.ParseTime(p.SubscribedAt)
 	var created []store.Episode
+	removedGUIDs, err := s.store.RemovedGUIDs(ctx, p.ID) // removed by hand: not added back
+	if err != nil {
+		return nil, err
+	}
 	for i, it := range f.Items {
 		if it.EnclosureURL == "" {
 			continue
@@ -176,6 +180,9 @@ func (s *Server) refreshRSS(ctx context.Context, p *store.Podcast, first bool) (
 			Explicit: it.Explicit, IsVideo: strings.HasPrefix(it.EnclosureType, "video/"), ChaptersURL: it.ChaptersURL, TranscriptURL: it.TranscriptURL, Position: i}
 		if e.Title == "" {
 			e.Title = "Untitled"
+		}
+		if removedGUIDs[e.GUID] {
+			continue
 		}
 		isNew, err := s.store.UpsertEpisode(ctx, &e, s.episodeAdded(ctx, p, &e))
 		if err != nil {
@@ -223,6 +230,10 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 	}
 	firstIndex := len(known) == 0
 	var created []store.Episode
+	removedGUIDs, err := s.store.RemovedGUIDs(ctx, p.ID) // removed by hand: not added back
+	if err != nil {
+		return nil, err
+	}
 	toQueue := 0
 	if firstIndex {
 		toQueue = p.DownloadLimit
@@ -256,6 +267,9 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 		}
 		e := store.Episode{PodcastID: p.ID, GUID: "yt:" + en.ID, Title: en.Title, Link: en.URL, EnclosureType: "audio/mp4", Duration: en.Duration,
 			PubDate: pub, ArtworkURL: en.Thumbnail, YouTubeID: en.ID, Position: i}
+		if removedGUIDs[e.GUID] {
+			continue
+		}
 		if id, ok := known[en.ID]; ok {
 			e.ID = id
 			e.PubDate = ""                                                                        // the listing's date is approximate; keep the exact one the download stored

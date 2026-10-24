@@ -70,6 +70,7 @@ func (s *Server) handleAddVideo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	s.store.Unremove(ctx, p.ID, "yt:"+id) // got again on purpose
 	e := store.Episode{PodcastID: p.ID, GUID: "yt:" + id, Title: info.Title, Description: info.Description, Link: norm, EnclosureType: "audio/mp4",
 		Duration: info.Duration, PubDate: store.FormatTime(info.UploadDate), ArtworkURL: info.Thumbnail, YouTubeID: id}
 	if _, err := s.store.UpsertEpisode(ctx, &e); err != nil {
@@ -133,6 +134,7 @@ func (s *Server) handlePickEpisode(w http.ResponseWriter, r *http.Request) {
 	if e.Title == "" {
 		e.Title = "Untitled"
 	}
+	s.store.Unremove(ctx, p.ID, e.GUID) // got again on purpose
 	if res.Feed.Title != "" {
 		e.Title = e.Title + " — " + res.Feed.Title
 	}

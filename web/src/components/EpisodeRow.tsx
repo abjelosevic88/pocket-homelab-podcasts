@@ -93,7 +93,7 @@ export function EpisodeRow({ ep, onChange, showPodcast = true, compact = false, 
           ...(ep.link ? [{ label: 'Open the original', icon: 'external', onSelect: () => window.open(ep.link, '_blank', 'noreferrer') }] : []),
           ...(ep.stream_url && dl === 'done' ? [{ label: 'Save the file…', icon: 'download', onSelect: () => { const a = document.createElement('a'); a.href = `${ep.stream_url}?download=1`; document.body.appendChild(a); a.click(); a.remove() } }] : []),
           'sep',
-          { label: 'Remove episode', icon: 'trash', danger: true, onSelect: async () => { if (confirm('Remove this episode from the list? It comes back on the next refresh unless the feed dropped it.')) upd(await act.remove(ep)) } },
+          { label: 'Remove episode', icon: 'trash', danger: true, onSelect: async () => { if (confirm('Remove this episode and its file from the server? It does not come back when the feed refreshes; Get it again to bring it back.')) upd(await act.remove(ep)) } },
         ]}><Icon name="more" size={16} /></MenuButton>
       </div>
     </div>

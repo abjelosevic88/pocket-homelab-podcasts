@@ -28,7 +28,7 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 - `POST /episodes/{id}/progress {position, listened, duration?, completed?}` — called by the player every ~10 s; `listened` seconds feed the stats.
 - `POST|DELETE /episodes/{id}/played` · `DELETE /episodes/{id}/history`
 - `POST|DELETE /episodes/{id}/download` · `POST|DELETE /episodes/{id}/queue` (`{front: true}` = play next) · `POST|DELETE /episodes/{id}/save`
-- `DELETE /episodes/{id}`
+- `DELETE /episodes/{id}`: removes the episode and its file; remembered per subscription (`removed_episodes`), so a feed refresh does not add it back. `POST /youtube/video` or `/picks` for the same item clears that.
 
 ## Lists
 - `GET /home` — everything the Home page shows.
