@@ -446,6 +446,7 @@ type SearchResult struct {
 	Thumbnail   string `json:"thumbnail"`
 	MembersOnly bool   `json:"members_only,omitempty"`
 	Live        bool   `json:"live,omitempty"`
+	Date        string `json:"date,omitempty"` // YYYYMMDD, approximate for search results
 }
 
 type rawSearchEntry struct {
@@ -464,6 +465,19 @@ type rawSearchEntry struct {
 	Availability string     `json:"availability"`
 	LiveStatus   string     `json:"live_status"`
 	Thumbnails   []rawThumb `json:"thumbnails"`
+	UploadDate   string     `json:"upload_date"`
+	Timestamp    int64      `json:"timestamp"` // approximate ("2 years ago") with youtubetab:approximate_date
+}
+
+// Day is YYYYMMDD from yt-dlp's upload_date, else from its (often approximate) timestamp; "" when unknown.
+func Day(uploadDate string, timestamp int64) string {
+	if len(uploadDate) == 8 {
+		return uploadDate
+	}
+	if timestamp > 0 {
+		return time.Unix(timestamp, 0).UTC().Format("20060102")
+	}
+	return ""
 }
 
 // YouTube's own search filters ("type: channel / video / playlist").
@@ -476,7 +490,8 @@ func (r *Runner) search(ctx context.Context, q, kind string, limit int) ([]rawSe
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	u := "https://www.youtube.com/results?search_query=" + url.QueryEscape(q) + "&sp=" + searchFilter[kind]
-	args := append(r.common(), "--flat-playlist", "-J", "--playlist-end", fmt.Sprint(limit), u)
+	// approximate_date turns YouTube's "3 weeks ago" into a timestamp, so results can show their age.
+	args := append(r.common(), "--flat-playlist", "-J", "--playlist-end", fmt.Sprint(limit), "--extractor-args", "youtubetab:approximate_date", u)
 	c := r.cmd(ctx, args...)
 	var stderr bytes.Buffer
 	c.Stderr = &stderr
@@ -536,7 +551,8 @@ func (r *Runner) SearchVideos(ctx context.Context, q string, limit int) ([]Searc
 		}
 		v := SearchResult{Kind: KindVideo, ID: e.ID, Title: e.Title, URL: "https://www.youtube.com/watch?v=" + e.ID, Channel: firstNonEmpty(e.Channel, e.Uploader),
 			ChannelID: e.ChannelID, Duration: int(e.Duration), Views: e.Views, Description: e.Description, Thumbnail: thumbURL(e.Thumbnails),
-			MembersOnly: e.Availability == "subscriber_only" || e.Availability == "premium_only", Live: e.LiveStatus == "is_live" || e.LiveStatus == "is_upcoming"}
+			MembersOnly: e.Availability == "subscriber_only" || e.Availability == "premium_only", Live: e.LiveStatus == "is_live" || e.LiveStatus == "is_upcoming",
+			Date: Day(e.UploadDate, e.Timestamp)}
 		if v.Thumbnail == "" {
 			v.Thumbnail = "https://i.ytimg.com/vi/" + e.ID + "/hqdefault.jpg"
 		}

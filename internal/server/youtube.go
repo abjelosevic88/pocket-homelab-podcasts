@@ -281,7 +281,7 @@ func (s *Server) handleListing(w http.ResponseWriter, r *http.Request) {
 		if e.MembersOnly && !members {
 			continue
 		}
-		items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": e.UploadDate, "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": !e.Live})
+		items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": ytdlp.Day(e.UploadDate, e.Timestamp), "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": !e.Live})
 	}
 	// a full page means there may be more; members-only ones count as seen
 	writeJSON(w, http.StatusOK, map[string]any{"episodes": items, "more": len(l.Entries) >= limit, "next": offset + len(l.Entries)})

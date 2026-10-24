@@ -131,7 +131,7 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 			if e.MembersOnly && !s.yt.HasCookies() {
 				continue
 			}
-			items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": e.UploadDate, "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": true})
+			items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": ytdlp.Day(e.UploadDate, e.Timestamp), "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": true})
 		}
 		existing, _ := s.store.FindPodcastByFeed(r.Context(), me(r), norm)
 		out := map[string]any{"kind": "youtube", "youtube_kind": kind, "url": norm, "title": l.Title, "author": l.Uploader, "image": l.Thumbnail, "description": l.Description, "episodes": items,
