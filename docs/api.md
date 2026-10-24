@@ -15,7 +15,7 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 - `POST /podcasts/{id}/favorite {favorite}` · `POST /podcasts/{id}/played {played}` · `POST /podcasts/{id}/download {count}` · `DELETE /podcasts/{id}/files?played=1`
 - `GET /podcasts/{id}/episodes?…` (same filters as `/episodes`)
 - `GET|POST|DELETE /podcasts/{id}/artwork` (POST: multipart `file` or JSON `{url}`)
-- `GET /youtube/search?type=channel|video|playlist&q=&limit=` (yt-dlp, cached 10 min). Channels: `{id, title, handle, url, followers, description, thumbnail, subscribed_id?}`; videos and playlists: `{kind, id, title, url, channel, duration?, views?, thumbnail, subscribed_id? (playlist followed), episode_id? (video already in your library)}`. Subscribe with `POST /podcasts {url}`, take a video with `POST /youtube/video {url}`.
+- `GET /youtube/search?type=channel|video|playlist&q=&limit=` (yt-dlp, cached 10 min; `limit` 1–100, default 12; no offset: for more, ask again with a larger limit). Channels: `{id, title, handle, url, followers, description, thumbnail, subscribed_id?}`; videos and playlists: `{kind, id, title, url, channel, duration?, views?, thumbnail, subscribed_id? (playlist followed), episode_id? (video already in your library)}`. Subscribe with `POST /podcasts {url}`, take a video with `POST /youtube/video {url}`.
 - `GET /youtube/listing?url=&offset=&limit=` → the next videos of a channel or playlist `{episodes, more, next}` (the Videos window loads these as you scroll).
 - `POST /youtube/video {url}` → downloads one video into your "Picks" show.
 - `POST /picks {feed_url, guid|title, download?}` → one episode of any feed into your "Picks" show (no subscription), downloaded unless `download: false`. `guid` comes from `/preview`.

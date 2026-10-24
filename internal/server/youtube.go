@@ -175,7 +175,8 @@ type itemJSON struct {
 }
 
 // handleSearchChannels searches YouTube for channels, videos or playlists
-// (?type=channel|video|playlist, cached ten minutes).
+// (?type=channel|video|playlist&limit=, cached ten minutes). YouTube's search has
+// no offset: a client that wants more asks again with a larger limit (up to 100).
 func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	typ := r.URL.Query().Get("type")
@@ -190,7 +191,7 @@ func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "yt-dlp is not available on this box")
 		return
 	}
-	limit := clampInt(queryInt(r, "limit"), 0, 30)
+	limit := clampInt(queryInt(r, "limit"), 0, 100)
 	if limit == 0 {
 		limit = 12
 	}
