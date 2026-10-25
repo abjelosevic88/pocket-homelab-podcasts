@@ -111,11 +111,26 @@ func (s *Server) refreshPodcast(ctx context.Context, p *store.Podcast, listing *
 	if _, busy := s.refreshing.LoadOrStore(p.ID, true); busy {
 		return 0, errors.New("already refreshing")
 	}
-	defer s.refreshing.Delete(p.ID)
-	first := p.LastRefreshOK == ""
+	s.live(p.UserID, "refresh", liveObject{"podcast_id": p.ID, "running": true})
 	var created []store.Episode
+	var removed []int64
+	defer func() {
+		s.refreshing.Delete(p.ID)
+		end := liveObject{"podcast_id": p.ID, "running": false, "new": len(created)}
+		if err != nil {
+			end["error"] = err.Error()
+		}
+		s.live(p.UserID, "refresh", end)
+		added := make([]int64, 0, len(created))
+		for _, e := range created {
+			added = append(added, e.ID)
+		}
+		s.liveEpisodes(p.UserID, p.ID, added, nil, removed)
+		s.livePodcasts(p.UserID, nil, []int64{p.ID}, nil)
+	}()
+	first := p.LastRefreshOK == ""
 	if p.Kind == store.KindYouTube {
-		created, err = s.refreshYouTube(ctx, p, listing, first)
+		created, removed, err = s.refreshYouTube(ctx, p, listing, first)
 	} else {
 		created, err = s.refreshRSS(ctx, p, first)
 	}
@@ -204,11 +219,11 @@ func (s *Server) refreshRSS(ctx context.Context, p *store.Podcast, first bool) (
 	return created, s.store.UpdateFeedState(ctx, p.ID, res.ETag, res.LastModified, nil)
 }
 
-func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.Listing, first bool) ([]store.Episode, error) {
+func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.Listing, first bool) ([]store.Episode, []int64, error) {
 	if l == nil {
 		var err error
 		if l, err = s.yt.Index(ctx, p.FeedURL, s.cfg.YouTubeIndexLimit); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	if l.ID != "" && p.YouTubeID == "" {
@@ -226,25 +241,25 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 	}
 	known, err := s.store.EpisodeIDsByYouTube(ctx, p.ID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	firstIndex := len(known) == 0
 	var created []store.Episode
 	removedGUIDs, err := s.store.RemovedGUIDs(ctx, p.ID) // removed by hand: not added back
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	toQueue := 0
 	if firstIndex {
 		toQueue = p.DownloadLimit
 	}
-	removed := 0
+	var retired []int64
 	members := s.yt.HasCookies() // a paying member's cookies make members-only videos downloadable
 	for i, en := range l.Entries {
 		if en.MembersOnly && !members {
 			// only the channel's paying members can get these; drop any listed before
 			if id, ok := known[en.ID]; ok && s.store.RetireMembersOnly(ctx, p.ID, id) {
-				removed++
+				retired = append(retired, id)
 			}
 			continue
 		}
@@ -274,13 +289,13 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 			e.ID = id
 			e.PubDate = ""                                                                        // the listing's date is approximate; keep the exact one the download stored
 			if _, err := s.store.UpsertEpisode(ctx, &e, s.episodeAdded(ctx, p, &e)); err != nil { // keeps the row, refreshes position/title
-				return nil, err
+				return nil, nil, err
 			}
 			continue
 		}
 		isNew, err := s.store.UpsertEpisode(ctx, &e, s.episodeAdded(ctx, p, &e))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !isNew {
 			continue
@@ -292,13 +307,13 @@ func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.
 			toQueue--
 		}
 	}
-	if removed > 0 {
+	if removed := len(retired); removed > 0 {
 		s.store.AddActivity(ctx, p.UserID, "refresh", fmt.Sprintf("%s: removed %d members-only video%s (only paying channel members can get them)", p.Title, removed, plural(removed)), p.ID, 0)
 	}
 	if len(created) > 0 {
 		s.kickDownloads()
 	}
-	return created, s.store.UpdateFeedState(ctx, p.ID, "", "", nil)
+	return created, retired, s.store.UpdateFeedState(ctx, p.ID, "", "", nil)
 }
 
 // notifyNew tells the person about new episodes through their channel.
@@ -385,6 +400,7 @@ func (s *Server) cacheArtwork(ctx context.Context, p *store.Podcast) {
 	}
 	p.ArtworkFile = name
 	_ = s.store.SetPodcastArtworkFile(ctx, p.ID, name)
+	s.livePodcasts(p.UserID, nil, []int64{p.ID}, nil)
 }
 
 // ---------- downloads ----------
@@ -394,6 +410,9 @@ func (s *Server) downloadWorker(ctx context.Context, n int) {
 		ep, err := s.store.ClaimDownload(ctx)
 		if err != nil {
 			s.log.Error("claim download", "err", err)
+		}
+		if ep != nil {
+			s.liveDownload(ctx, ep.ID, store.DownloadDownloading, "")
 		}
 		if ep == nil {
 			select {
@@ -435,6 +454,7 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 	p, err := s.store.GetPodcastAny(ctx, e.PodcastID)
 	if err != nil {
 		_ = s.store.SetDownloadState(ctx, e.ID, store.DownloadFailed, "subscription gone")
+		s.liveDownload(ctx, e.ID, store.DownloadFailed, "subscription gone")
 		return
 	}
 	dir := filepath.Join(s.cfg.MediaDir, fmt.Sprintf("%d", p.ID))
@@ -492,6 +512,7 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 		s.log.Error("record download", "err", err)
 		return
 	}
+	s.live(p.UserID, "download", liveObject{"episode_id": e.ID, "podcast_id": p.ID, "state": store.DownloadDone})
 	s.store.AddActivity(ctx, p.UserID, "download", fmt.Sprintf("Downloaded “%s” (%s) — %.1f MB", e.Title, p.Title, float64(bytes)/1048576), p.ID, e.ID)
 
 	s.log.Info("downloaded", "podcast", p.Title, "episode", e.Title, "mb", bytes>>20)
@@ -514,6 +535,7 @@ func (s *Server) downloadFailed(ctx context.Context, p *store.Podcast, e *store.
 	if permanentFailure(err) {
 		_ = s.store.GiveUpDownload(ctx, e.ID)
 	}
+	s.live(p.UserID, "download", liveObject{"episode_id": e.ID, "podcast_id": p.ID, "state": store.DownloadFailed, "error": err.Error()})
 	s.store.AddActivity(ctx, p.UserID, "error", fmt.Sprintf("Download of “%s” failed: %s", e.Title, err.Error()), p.ID, e.ID)
 	s.log.Warn("download failed", "episode", e.Title, "err", err)
 }
@@ -680,6 +702,7 @@ func (s *Server) cull(ctx context.Context) {
 	for _, c := range cands {
 		s.removeEpisodeFile(c.FilePath)
 		_ = s.store.ClearEpisodeFile(ctx, c.EpisodeID, store.DownloadCulled)
+		s.liveDownload(ctx, c.EpisodeID, store.DownloadCulled, "")
 		s.store.AddActivity(ctx, c.UserID, "cull", "Removed the file of “"+c.Title+"” (retention)", 0, c.EpisodeID)
 	}
 	if len(cands) > 0 {
@@ -689,11 +712,23 @@ func (s *Server) cull(ctx context.Context) {
 
 // retryFailed gives failed downloads another go, three times at most.
 func (s *Server) retryFailed(ctx context.Context) {
-	res, err := s.store.DB.ExecContext(ctx, `UPDATE episodes SET download = 'queued' WHERE download = 'failed' AND download_tries < 3`)
-	if err == nil {
-		if n, _ := res.RowsAffected(); n > 0 {
-			s.kickDownloads()
+	rows, err := s.store.DB.QueryContext(ctx, `UPDATE episodes SET download = 'queued' WHERE download = 'failed' AND download_tries < 3 RETURNING id`)
+	if err != nil {
+		return
+	}
+	var requeued []int64
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			requeued = append(requeued, id)
 		}
+	}
+	rows.Close()
+	if len(requeued) > 0 {
+		s.kickDownloads()
+	}
+	for _, id := range requeued {
+		s.liveDownload(ctx, id, store.DownloadQueued, "")
 	}
 }
 

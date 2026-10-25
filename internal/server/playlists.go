@@ -66,6 +66,7 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "create playlist")
 		return
 	}
+	s.live(me(r), "playlists", nil)
 	p.Count, _ = s.store.CountEpisodes(r.Context(), p.Filter())
 	writeJSON(w, http.StatusCreated, p)
 }
@@ -93,6 +94,7 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "update playlist")
 		return
 	}
+	s.live(me(r), "playlists", nil)
 	p.Count, _ = s.store.CountEpisodes(r.Context(), p.Filter())
 	writeJSON(w, http.StatusOK, p)
 }
@@ -102,6 +104,7 @@ func (s *Server) handleDeletePlaylist(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "delete playlist")
 		return
 	}
+	s.live(me(r), "playlists", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

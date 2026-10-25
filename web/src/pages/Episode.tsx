@@ -11,6 +11,7 @@ import { Artwork } from '../components/Artwork'
 import { safeHTML } from '../components/Player'
 import { NotesPanel } from '../components/NotesPanel'
 import { bytes, clock, fmtDate, fmtDur, progressPct, DL_LABEL } from '../lib/format'
+import { useLive } from '../lib/realtime'
 
 export default function EpisodePage() {
   const { id } = useParams()
@@ -21,11 +22,11 @@ export default function EpisodePage() {
   const act = useEpisodeActions()
   const { data: e, setData, reload } = useAsync(() => api.get<EpisodeDetail>(`${V1}/episodes/${id}`), [id])
   const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    if (!e || (e.download !== 'queued' && e.download !== 'downloading')) return
-    const t = setInterval(reload, 3000)
-    return () => clearInterval(t)
-  }, [e?.download]) // eslint-disable-line react-hooks/exhaustive-deps
+  // its download, saved state or removal from another tab or device (progress is applied in place below)
+  const eid = Number(id)
+  const busyDl = e?.download === 'queued' || e?.download === 'downloading'
+  useLive(ev => ((ev.type === 'download' || ev.type === 'saved') && ev.episode_id === eid) || (ev.type === 'history' && (ev.episode_id === eid || ev.episode_id === 0))
+    || (ev.type === 'episodes' && (ev.updated.includes(eid) || ev.removed.includes(eid))) || ev.type === 'queue', reload, { fallbackMs: busyDl ? 3000 : 0 })
   useEffect(() => {
     const h = (ev: Event) => { const d = (ev as CustomEvent).detail as { id: number; position: number; completed: boolean }; if (e && d.id === e.id) setData({ ...e, play_position: d.position, completed: d.completed }) }
     window.addEventListener('pp:progress', h)

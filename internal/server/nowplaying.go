@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -33,7 +32,6 @@ type nowSession struct {
 type nowHub struct {
 	mu       sync.Mutex
 	sessions map[int64]*nowSession
-	subs     map[int64]map[chan struct{}]bool
 }
 
 const (
@@ -41,23 +39,22 @@ const (
 	nowKeep  = 30 * time.Minute // a paused session is shown this long
 )
 
-func (h *nowHub) notify(uid int64) {
-	for ch := range h.subs[uid] {
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// trackPlayback records one progress report.
+// trackPlayback records one progress report and pushes the new state to the
+// person's open tabs.
 func (s *Server) trackPlayback(r *http.Request, uid int64, e *store.Episode, position, listened int, completed bool, client string) {
-	h := &s.now
-	now := time.Now()
 	device := s.deviceLabel(r)
 	if client == "" {
 		client = device
 	}
+	if s.recordPlayback(uid, e, position, listened, completed, client, device) {
+		s.liveNowPlaying(uid)
+	}
+}
+
+// recordPlayback updates the in-memory session; false when nothing changed.
+func (s *Server) recordPlayback(uid int64, e *store.Episode, position, listened int, completed bool, client, device string) bool {
+	h := &s.now
+	now := time.Now()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.sessions == nil {
@@ -67,9 +64,9 @@ func (s *Server) trackPlayback(r *http.Request, uid int64, e *store.Episode, pos
 	if completed {
 		if prev != nil && prev.EpisodeID == e.ID {
 			delete(h.sessions, uid)
-			h.notify(uid)
+			return true
 		}
-		return
+		return false
 	}
 	cur := &nowSession{EpisodeID: e.ID, Position: float64(position), Duration: e.Duration, Device: device, Client: client, At: now, Rate: 1}
 	if prev != nil && prev.EpisodeID == e.ID && prev.Client == client {
@@ -86,7 +83,21 @@ func (s *Server) trackPlayback(r *http.Request, uid int64, e *store.Episode, pos
 		cur.Playing = listened > 0
 	}
 	h.sessions[uid] = cur
-	h.notify(uid)
+	// no further report means it stopped (or, paused, went stale): say so then
+	after := nowKeep + time.Second
+	if cur.Playing {
+		after = nowStall + time.Second
+	}
+	at := cur.At
+	time.AfterFunc(after, func() {
+		h.mu.Lock()
+		same := h.sessions[uid] != nil && h.sessions[uid].At.Equal(at)
+		h.mu.Unlock()
+		if same {
+			s.liveNowPlaying(uid)
+		}
+	})
+	return true
 }
 
 func clampFloat(v, lo, hi float64) float64 {
@@ -213,58 +224,8 @@ func (s *Server) handleNowPlaying(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.nowJSON(r.Context(), me(r)))
 }
 
-// handleNowPlayingEvents streams the person's playback as server-sent events.
+// handleNowPlayingEvents streams the person's playback as server-sent events
+// (the older stream; GET /api/v1/events carries the same now_playing events).
 func (s *Server) handleNowPlayingEvents(w http.ResponseWriter, r *http.Request) {
-	fl, ok := w.(http.Flusher)
-	if !ok {
-		writeErr(w, http.StatusInternalServerError, "streaming unsupported")
-		return
-	}
-	uid := me(r)
-	ch := make(chan struct{}, 1)
-	h := &s.now
-	h.mu.Lock()
-	if h.subs == nil {
-		h.subs = map[int64]map[chan struct{}]bool{}
-	}
-	if h.subs[uid] == nil {
-		h.subs[uid] = map[chan struct{}]bool{}
-	}
-	h.subs[uid][ch] = true
-	h.mu.Unlock()
-	defer func() {
-		h.mu.Lock()
-		delete(h.subs[uid], ch)
-		h.mu.Unlock()
-	}()
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no")
-	send := func() {
-		b, _ := jsonBytes(s.nowJSON(r.Context(), uid))
-		fmt.Fprintf(w, "data: %s\n\n", b)
-		fl.Flush()
-	}
-	send()
-	// a stalled "playing" session turns into paused without a new report
-	tick := time.NewTicker(5 * time.Second)
-	defer tick.Stop()
-	last := ""
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-ch:
-			send()
-		case <-tick.C:
-			state := fmt.Sprint(s.nowJSON(r.Context(), uid)["playing"])
-			if state != last {
-				last = state
-				send()
-			} else {
-				fmt.Fprint(w, ": keep-alive\n\n")
-				fl.Flush()
-			}
-		}
-	}
+	s.serveEvents(w, r, "now_playing")
 }

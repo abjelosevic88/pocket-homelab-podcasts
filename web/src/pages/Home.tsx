@@ -8,6 +8,7 @@ import { EpisodeList } from '../components/EpisodeRow'
 import { PodcastCard } from '../components/PodcastCard'
 import { Carousel } from '../components/Carousel'
 import { Icon } from '../components/icons'
+import { useLive } from '../lib/realtime'
 
 export default function Home() {
   const { user } = useApp()
@@ -15,6 +16,8 @@ export default function Home() {
   const { data, setData, loading, reload } = useAsync(() => api.get<HomeT>(`${V1}/home`), [])
   const [refreshing, setRefreshing] = useState(false)
   useEffect(() => { const h = () => reload(); window.addEventListener('pp:queue', h); return () => window.removeEventListener('pp:queue', h) }, [reload])
+  // new episodes, listening on the phone, queue and downloads elsewhere; rows move positions in place
+  useLive(ev => ev.type !== 'now_playing' && ev.type !== 'hello' && ev.type !== 'refresh' && ev.type !== 'playlists' && ev.type !== 'settings', reload, { minGap: 10_000 })
   const setList = useCallback((key: 'continue' | 'queue' | 'fresh' | 'recent') => (eps: Episode[]) => setData(d => d ? { ...d, [key]: eps } : d), [setData])
   const refreshAll = async () => {
     setRefreshing(true)

@@ -237,3 +237,9 @@ func (s *Store) OwnerOfPodcast(ctx context.Context, id int64) (int64, error) {
 	}
 	return uid.Int64, nil
 }
+
+// EpisodeOwner returns whose subscription an episode is under, and which one.
+func (s *Store) EpisodeOwner(ctx context.Context, episodeID int64) (userID, podcastID int64, err error) {
+	err = s.DB.QueryRowContext(ctx, `SELECT p.user_id, p.id FROM episodes e JOIN podcasts p ON p.id = e.podcast_id WHERE e.id = ?`, episodeID).Scan(&userID, &podcastID)
+	return userID, podcastID, notFound(err)
+}

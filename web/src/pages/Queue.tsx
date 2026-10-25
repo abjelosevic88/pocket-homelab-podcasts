@@ -5,6 +5,7 @@ import { Confirm, Empty, Loading, PageHeader, useAsync, useToast } from '../comp
 import { EpisodeRow } from '../components/EpisodeRow'
 import { fmtDur } from '../lib/format'
 import { Icon } from '../components/icons'
+import { useLive } from '../lib/realtime'
 
 export default function Queue() {
   const { toast } = useToast()
@@ -12,6 +13,7 @@ export default function Queue() {
   const [clear, setClear] = useState(false)
   const [drag, setDrag] = useState<number | null>(null)
   useEffect(() => { const h = () => reload(); window.addEventListener('pp:queue', h); return () => window.removeEventListener('pp:queue', h) }, [reload])
+  useLive(ev => ev.type === 'queue' || (ev.type === 'episodes' && ev.removed.length > 0) || (ev.type === 'podcasts' && ev.removed.length > 0) || ev.type === 'download', reload)
   if (loading && !data) return <Loading />
   const eps = data || []
   const total = eps.reduce((a, e) => a + Math.max(0, e.duration - (e.completed ? e.duration : e.play_position)), 0)

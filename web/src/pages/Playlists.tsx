@@ -5,9 +5,11 @@ import type { Playlist, Podcast } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, PageHeader, Segmented, Switch, useAsync, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { fmtDur } from '../lib/format'
+import { useLive } from '../lib/realtime'
 
 export default function Playlists() {
   const { data, loading, reload } = useAsync(() => api.get<Playlist[]>(`${V1}/playlists`), [])
+  useLive(ev => ev.type === 'playlists' || ev.type === 'episodes' || ev.type === 'podcasts' || (ev.type === 'progress' && ev.completed), reload, { minGap: 5000 })
   const [edit, setEdit] = useState<Partial<Playlist> | null>(null)
   // /playlists?new=1 (the sidebar's + and the Add menu) opens a new one
   const [sp, setSp] = useSearchParams()

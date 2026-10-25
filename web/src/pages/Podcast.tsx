@@ -10,6 +10,7 @@ import { ago, bytes, fmtDate, plain } from '../lib/format'
 import { safeHTML } from '../components/Player'
 import { Icon } from '../components/icons'
 import { useCrumb } from '../components/Layout'
+import { useLive } from '../lib/realtime'
 
 export default function Podcast() {
   const { id } = useParams()
@@ -30,11 +31,11 @@ export default function Podcast() {
   useEffect(() => { setPage(0) }, [status, sort, dq, id])
   useCrumb(p ? [{ label: 'Podcasts', to: '/podcasts' }, { label: p.title }] : [{ label: 'Podcasts', to: '/podcasts' }, { label: '…' }])
   const setEps = useCallback((list: Episode[]) => eps.setData(d => d ? { ...d, episodes: list } : d), [eps])
-  useEffect(() => {
-    if (!p?.refreshing) return
-    const t = setInterval(() => { reloadP(); eps.reload() }, 3000)
-    return () => clearInterval(t)
-  }, [p?.refreshing]) // eslint-disable-line react-hooks/exhaustive-deps
+  // refreshes, new or removed episodes, downloads and settings changed anywhere show up at once
+  const pid = Number(id)
+  useLive(ev => (ev.type === 'refresh' && ev.podcast_id === pid) || (ev.type === 'podcasts' && ev.updated.includes(pid)), reloadP, { fallbackMs: p?.refreshing ? 3000 : 60_000 })
+  useLive(ev => ((ev.type === 'episodes' || ev.type === 'download') && ev.podcast_id === pid) || (ev.type === 'refresh' && ev.podcast_id === pid && !ev.running) || (ev.type === 'history' && ev.episode_id === 0), eps.reload, { fallbackMs: p?.refreshing ? 3000 : 60_000, minGap: 1500 })
+  useLive(ev => ev.type === 'podcasts' && ev.removed.includes(pid), () => navigate('/podcasts'), { fallbackMs: 0 })
   if (!p) return <Loading />
   const refresh = async () => {
     setBusy(true)

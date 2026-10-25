@@ -30,6 +30,7 @@ func (s *Server) picksPodcast(ctx context.Context, uid int64) (*store.Podcast, e
 		return nil, err
 	}
 	_ = s.store.UpdateFeedState(ctx, p.ID, "", "", nil)
+	s.livePodcasts(uid, []int64{p.ID}, nil, nil)
 	return s.store.GetPodcast(ctx, uid, p.ID)
 }
 
@@ -83,6 +84,7 @@ func (s *Server) handleAddVideo(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.QueueDownload(ctx, e.ID)
 	s.kickDownloads()
 	s.store.AddActivity(ctx, me(r), "pick", "Picked video “"+e.Title+"”", p.ID, e.ID)
+	s.livePicked(me(r), p.ID, e.ID)
 	ep, _ := s.store.GetEpisode(ctx, me(r), e.ID)
 	writeJSON(w, http.StatusCreated, s.episodeDetail(r, ep))
 }
@@ -148,6 +150,7 @@ func (s *Server) handlePickEpisode(w http.ResponseWriter, r *http.Request) {
 		s.kickDownloads()
 	}
 	s.store.AddActivity(ctx, me(r), "pick", "Picked “"+item.Title+"” from "+res.Feed.Title, p.ID, e.ID)
+	s.livePicked(me(r), p.ID, e.ID)
 	ep, _ := s.store.GetEpisode(ctx, me(r), e.ID)
 	writeJSON(w, http.StatusCreated, s.episodeDetail(r, ep))
 }
@@ -287,4 +290,10 @@ func (s *Server) handleListing(w http.ResponseWriter, r *http.Request) {
 	}
 	// a full page means there may be more; members-only ones count as seen
 	writeJSON(w, http.StatusOK, map[string]any{"episodes": items, "more": len(l.Entries) >= limit, "next": offset + len(l.Entries)})
+}
+
+// livePicked says an episode landed in (or came back to) the person's Picks.
+func (s *Server) livePicked(uid, podcastID, episodeID int64) {
+	s.liveEpisodes(uid, podcastID, []int64{episodeID}, nil, nil)
+	s.livePodcasts(uid, nil, []int64{podcastID}, nil)
 }

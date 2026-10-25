@@ -7,6 +7,7 @@ import { PodcastCard } from '../components/PodcastCard'
 import { Artwork } from '../components/Artwork'
 import { ago, bytes } from '../lib/format'
 import { Icon } from '../components/icons'
+import { useLive } from '../lib/realtime'
 
 export default function Podcasts() {
   const [q, setQ] = useState('')
@@ -14,7 +15,8 @@ export default function Podcasts() {
   const [view, setView] = useState<'grid' | 'list'>((localStorage.getItem('pp-pod-view') as 'grid' | 'list') || 'grid')
   const [kind, setKind] = useState('')
   const dq = useDebounce(q)
-  const { data, loading } = useAsync(() => api.get<Podcast[]>(`${V1}/podcasts?q=${encodeURIComponent(dq)}&sort=${sort}&kind=${kind}`), [dq, sort, kind])
+  const { data, loading, reload } = useAsync(() => api.get<Podcast[]>(`${V1}/podcasts?q=${encodeURIComponent(dq)}&sort=${sort}&kind=${kind}`), [dq, sort, kind])
+  useLive(ev => ev.type === 'podcasts' || (ev.type === 'episodes' && ev.added.length > 0), reload, { minGap: 3000 })
   const pick = (s: string) => { setSort(s); localStorage.setItem('pp-pod-sort', s) }
   const pickView = (v: 'grid' | 'list') => { setView(v); localStorage.setItem('pp-pod-view', v) }
   return (

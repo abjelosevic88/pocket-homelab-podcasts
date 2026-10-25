@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { api, V1 } from './api'
 import { useApp } from './app-context'
 import { useToast } from '../components/ui'
+import { holdRealtime, onRealtime, useRealtimeConnected } from './realtime'
 import type { Chapter, Episode, EpisodeDetail, Segment } from './types'
 
 /** The one audio element of the app and everything around it: what plays,
@@ -77,7 +78,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const report = useCallback(async (opts: { completed?: boolean; force?: boolean } = {}) => {
     const e = cur.current
-    if (!e) return
+    // a restored episode that was never loaded has no place of its own: reporting
+    // 0 would rewind the server (and, live, every other device)
+    if (!e || !audio.getAttribute('src')) return
     const pos = Math.floor(audio.currentTime)
     const l = Math.floor(listened.current)
     if (!opts.force && !opts.completed && l === 0) return
@@ -106,7 +109,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       else { api.post(`${V1}/episodes/${e.id}/download`).then(() => toast('Downloading first — press play again when it is ready')).catch(err => toast((err as Error).message, 'err')) }
       return
     }
-    const same = cur.current?.id === e.id
+    const same = cur.current?.id === e.id && !!audio.getAttribute('src') // a restored episode is not loaded yet
     if (same && !opts.fromStart) { audio.play().catch(() => {}); return }
     if (cur.current) report({ force: true })
     const detail: EpisodeDetail = { ...(e as EpisodeDetail), chapters: (e as EpisodeDetail).chapters || [], sponsors: (e as EpisodeDetail).sponsors || [] }
@@ -135,7 +138,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [audio, applyMediaSession, report, toast])
 
   const pause = useCallback(() => audio.pause(), [audio])
-  const toggle = useCallback(() => { if (!cur.current) return; if (audio.paused) audio.play().catch(() => {}); else audio.pause() }, [audio])
+  const toggle = useCallback(() => { if (!cur.current) return; if (!audio.getAttribute('src')) { play(cur.current); return } if (audio.paused) audio.play().catch(() => {}); else audio.pause() }, [audio, play])
   const seek = useCallback((t: number) => { audio.currentTime = Math.max(0, Math.min(t, audio.duration || t)); lastT.current = audio.currentTime; setTime(audio.currentTime) }, [audio])
   const skip = useCallback((d: number) => seek(audio.currentTime + d), [audio, seek])
   const setRate = useCallback((r: number) => { r = Math.round(r * 100) / 100; audio.playbackRate = r; setRateState(r) }, [audio])
@@ -271,19 +274,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => localStorage.removeItem(LAST_KEY))
   }, [applyMediaSession])
 
-  // what other devices play, pushed live by the server
+  // what other devices play, pushed live by the server (GET /api/v1/events);
+  // a slow poll covers a dropped stream
   const [remote, setRemote] = useState<RemoteSession | null>(null)
   const [clockOffset, setClockOffset] = useState(0)
+  const live = useRealtimeConnected()
+  const showRemote = useCallback((d: RemoteSession) => { setClockOffset(d.server_time - Date.now()); setRemote(d.active ? d : null) }, [])
+  const fetchRemote = useCallback(() => { api.get<RemoteSession>(`${V1}/now-playing`).then(showRemote).catch(() => {}) }, [showRemote])
+  useEffect(() => holdRealtime(), [])
   useEffect(() => {
-    let es: EventSource | null = null, retry: number | undefined, closed = false
-    const connect = () => {
-      es = new EventSource(`${V1}/now-playing/events`)
-      es.onmessage = ev => { try { const d = JSON.parse(ev.data) as RemoteSession; setClockOffset(d.server_time - Date.now()); setRemote(d.active ? d : null) } catch { /* ignore */ } }
-      es.onerror = () => { es?.close(); if (!closed) retry = window.setTimeout(connect, 5000) }
-    }
-    connect()
-    return () => { closed = true; es?.close(); if (retry) clearTimeout(retry) }
-  }, [])
+    fetchRemote()
+    if (live) return
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') fetchRemote() }, 60_000)
+    return () => clearInterval(t)
+  }, [live, fetchRemote])
+  useEffect(() => onRealtime(ev => {
+    if (ev.type === 'hello') { setClockOffset(ev.server_time - Date.now()); return }
+    if (ev.type === 'now_playing') { showRemote(ev); return }
+    if (ev.type === 'reconnected') { fetchRemote(); return }
+    if (ev.type !== 'progress' || (ev.client && ev.client === CLIENT_ID)) return
+    // another tab or the phone moved: lists and the episode page show the new place
+    window.dispatchEvent(new CustomEvent('pp:progress', { detail: { id: ev.episode_id, position: ev.position, completed: ev.completed, remote: true } }))
+    // the same episode, paused here: resume from where the other device is.
+    // Never while this tab plays it — that would rewind (or jump) the listener.
+    const c = cur.current
+    if (!c || c.id !== ev.episode_id || !audio.paused) return
+    cur.current = { ...c, play_position: ev.position, completed: ev.completed }
+    if (audio.getAttribute('src') && Math.abs(audio.currentTime - ev.position) > 1) { audio.currentTime = ev.position; lastT.current = ev.position }
+    setTime(ev.position)
+  }), [audio, showRemote, fetchRemote])
   const fromElsewhere = !!remote && remote.client !== CLIENT_ID
   // another device wins while it plays and this tab does not; a paused one shows only when this tab has nothing loaded
   const remoteVisible = fromElsewhere && !playing && (remote!.playing || !current)

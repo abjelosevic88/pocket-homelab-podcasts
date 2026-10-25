@@ -51,6 +51,7 @@ type Server struct {
 	ytVersion    atomic.Value
 	ytc          ytChecker
 	now          nowHub
+	realtime     realtimeHub
 	ytBusy       atomic.Bool
 
 	core    *core.Client
@@ -252,6 +253,7 @@ func (s *Server) Router() http.Handler {
 
 			r.Get("/now-playing", s.handleNowPlaying)
 			r.Get("/now-playing/events", s.handleNowPlayingEvents)
+			r.Get("/events", s.handleEvents)
 			r.Get("/queue", s.handleQueue)
 			r.Put("/queue", s.handleQueueReorder)
 			r.Delete("/queue", s.handleQueueClear)

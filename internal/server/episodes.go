@@ -133,12 +133,15 @@ func (s *Server) handleGetEpisode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteEpisode(w http.ResponseWriter, r *http.Request) {
-	file, err := s.store.DeleteEpisode(r.Context(), me(r), idParam(r, "id"))
+	id := idParam(r, "id")
+	_, podcast, _ := s.store.EpisodeOwner(r.Context(), id)
+	file, err := s.store.DeleteEpisode(r.Context(), me(r), id)
 	if err != nil {
 		s.fail(w, err, "delete episode")
 		return
 	}
 	s.removeEpisodeFile(file)
+	s.liveEpisodes(me(r), podcast, nil, nil, []int64{id})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -149,12 +152,14 @@ func (s *Server) handleDeleteEpisode(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ensureFile(ctx context.Context, e *store.Episode) (*store.Episode, error) {
 	if e.Download == store.DownloadDone && e.FilePath != "" && !fileExists(filepath.Join(s.cfg.MediaDir, filepath.FromSlash(e.FilePath))) {
 		_ = s.store.ClearEpisodeFile(ctx, e.ID, store.DownloadNone) // the file went missing on disk
+		s.liveDownload(ctx, e.ID, store.DownloadNone, "")
 	}
 	claimed, err := s.store.ClaimDownloadNow(ctx, e.ID)
 	if err != nil {
 		return nil, err
 	}
 	if claimed {
+		s.liveDownload(ctx, e.ID, store.DownloadDownloading, "")
 		s.log.Info("downloading on request", "episode", e.Title)
 		go func(id int64) {
 			bg, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
@@ -337,6 +342,9 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 		if applied && time.Since(at) >= 0 && time.Since(at) < 30*time.Second && current.PlayPosition == in.Position {
 			s.trackPlayback(r, me(r), e, in.Position, in.Listened, current.Completed, strings.TrimSpace(in.Client))
 		}
+		if applied {
+			s.liveProgress(me(r), current, strings.TrimSpace(in.Client))
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"position": current.PlayPosition, "completed": current.Completed, "applied": applied, "report_id": in.ReportID})
 		return
 	}
@@ -348,9 +356,11 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 				// RSS files are only a cache of the enclosure: drop them once played
 				s.removeEpisodeFile(e.FilePath)
 				_ = s.store.ClearEpisodeFile(ctx, e.ID, store.DownloadNone)
+				s.live(me(r), "download", liveObject{"episode_id": e.ID, "podcast_id": e.PodcastID, "state": store.DownloadNone})
 			}
 		}
 	}
+	s.liveProgressAt(me(r), e, in.Position, completed || wasDone, strings.TrimSpace(in.Client))
 	writeJSON(w, http.StatusOK, map[string]any{"position": in.Position, "completed": completed || wasDone})
 }
 
@@ -365,6 +375,8 @@ func (s *Server) handleMarkPlayed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.store.RemoveFromQueue(r.Context(), me(r), e.ID)
+	s.liveProgressNow(r.Context(), me(r), e.ID)
+	s.live(me(r), "queue", nil)
 	writeJSON(w, http.StatusOK, map[string]bool{"completed": true})
 }
 
@@ -373,6 +385,7 @@ func (s *Server) handleMarkUnplayed(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "mark unplayed")
 		return
 	}
+	s.liveProgressNow(r.Context(), me(r), idParam(r, "id"))
 	writeJSON(w, http.StatusOK, map[string]bool{"completed": false})
 }
 
@@ -381,6 +394,8 @@ func (s *Server) handleForgetEpisode(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "forget")
 		return
 	}
+	s.liveProgressNow(r.Context(), me(r), idParam(r, "id"))
+	s.live(me(r), "history", liveObject{"episode_id": idParam(r, "id")})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -406,6 +421,7 @@ func (s *Server) handleDownloadEpisode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.kickDownloads()
 	e, _ = s.store.GetEpisode(r.Context(), me(r), e.ID)
+	s.live(me(r), "download", liveObject{"episode_id": e.ID, "podcast_id": e.PodcastID, "state": e.Download})
 	writeJSON(w, http.StatusAccepted, s.episodeDetail(r, e))
 }
 
@@ -420,6 +436,7 @@ func (s *Server) handleDeleteDownload(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "delete download")
 		return
 	}
+	s.live(me(r), "download", liveObject{"episode_id": e.ID, "podcast_id": e.PodcastID, "state": store.DownloadNone})
 	e, _ = s.store.GetEpisode(r.Context(), me(r), e.ID)
 	writeJSON(w, http.StatusOK, s.episodeDetail(r, e))
 }
@@ -464,6 +481,7 @@ func (s *Server) handleQueueAdd(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "queue")
 		return
 	}
+	s.live(me(r), "queue", nil)
 	s.handleQueue(w, r)
 }
 
@@ -472,6 +490,7 @@ func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "queue")
 		return
 	}
+	s.live(me(r), "queue", nil)
 	s.handleQueue(w, r)
 }
 
@@ -487,6 +506,7 @@ func (s *Server) handleQueueReorder(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "queue")
 		return
 	}
+	s.live(me(r), "queue", nil)
 	s.handleQueue(w, r)
 }
 
@@ -495,6 +515,7 @@ func (s *Server) handleQueueClear(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "queue")
 		return
 	}
+	s.live(me(r), "queue", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -518,6 +539,7 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "save")
 		return
 	}
+	s.live(me(r), "saved", liveObject{"episode_id": idParam(r, "id"), "saved": true})
 	writeJSON(w, http.StatusOK, map[string]bool{"saved": true})
 }
 
@@ -526,6 +548,7 @@ func (s *Server) handleUnsave(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "save")
 		return
 	}
+	s.live(me(r), "saved", liveObject{"episode_id": idParam(r, "id"), "saved": false})
 	writeJSON(w, http.StatusOK, map[string]bool{"saved": false})
 }
 
@@ -555,5 +578,6 @@ func (s *Server) handleClearHistory(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "history")
 		return
 	}
+	s.live(me(r), "history", liveObject{"episode_id": 0})
 	w.WriteHeader(http.StatusNoContent)
 }

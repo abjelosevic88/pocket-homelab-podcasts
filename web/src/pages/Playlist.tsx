@@ -9,6 +9,7 @@ import { PlaylistEditor, describe } from './Playlists'
 import { fmtDur } from '../lib/format'
 import { Icon } from '../components/icons'
 import { useCrumb } from '../components/Layout'
+import { useLive } from '../lib/realtime'
 
 export default function PlaylistPage() {
   const { id } = useParams()
@@ -16,6 +17,7 @@ export default function PlaylistPage() {
   const { toast } = useToast()
   const player = usePlayer()
   const { data, setData, loading, reload } = useAsync(() => api.get<{ playlist: PlaylistT; episodes: Episode[]; total: number }>(`${V1}/playlists/${id}/episodes?limit=200`), [id])
+  useLive(ev => ev.type === 'playlists' || ev.type === 'episodes' || ev.type === 'download' || ev.type === 'podcasts' || (ev.type === 'progress' && ev.completed), reload, { minGap: 3000 })
   const [edit, setEdit] = useState(false)
   useCrumb([{ label: 'Playlists', to: '/playlists' }, { label: data?.playlist.name || '…' }])
   if (loading && !data) return <Loading />

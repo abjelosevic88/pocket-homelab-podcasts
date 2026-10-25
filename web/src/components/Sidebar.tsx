@@ -7,6 +7,7 @@ import type { Dashboard, Playlist, Podcast } from '../lib/types'
 import { artColor } from '../lib/format'
 import { Icon } from './icons'
 import { type Anchor, type MenuItem, Menu, rectOf } from './ui'
+import { useLive } from '../lib/realtime'
 
 const SHOWN = 10
 
@@ -31,9 +32,12 @@ function useSidebarData(): SidebarData {
     const h = () => load.current()
     window.addEventListener('pp:queue', h)
     window.addEventListener('pp:changed', h)
-    const t = setInterval(h, 60000)
-    return () => { window.removeEventListener('pp:queue', h); window.removeEventListener('pp:changed', h); clearInterval(t) }
+    return () => { window.removeEventListener('pp:queue', h); window.removeEventListener('pp:changed', h) }
   }, [])
+  // counts and lists change on other devices too: live events (a slow poll while the stream is down)
+  useLive(ev => ev.type === 'podcasts' || ev.type === 'playlists' || ev.type === 'queue' || ev.type === 'episodes' || ev.type === 'history'
+    || (ev.type === 'download' && (ev.state === 'done' || ev.state === 'failed' || ev.state === 'queued'))
+    || (ev.type === 'progress' && ev.completed) || ev.type === 'saved', () => load.current(), { minGap: 5000 })
   // a page may have subscribed, played or downloaded something: refresh on navigation, at most every few seconds
   useEffect(() => { if (Date.now() - last.current > 4000) load.current() }, [loc.pathname])
   return data

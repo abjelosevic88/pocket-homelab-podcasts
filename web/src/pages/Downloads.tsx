@@ -1,17 +1,15 @@
-import { useEffect } from 'react'
 import { api, V1 } from '../lib/api'
 import type { Episode } from '../lib/types'
 import { Card, Empty, Loading, PageHeader, useAsync } from '../components/ui'
 import { EpisodeList } from '../components/EpisodeRow'
 import { bytes } from '../lib/format'
+import { useLive } from '../lib/realtime'
 
 export default function Downloads() {
   const { data, setData, loading, reload } = useAsync(() => api.get<{ pending: Episode[]; done: Episode[]; bytes: number; yt_dlp: string }>(`${V1}/downloads`), [])
-  useEffect(() => {
-    if (!data || data.pending.every(e => e.download === 'failed')) return
-    const t = setInterval(reload, 4000)
-    return () => clearInterval(t)
-  }, [data, reload])
+  // download workers, other tabs and the phone say when something moved; poll only while the stream is down
+  const active = !!data && data.pending.some(e => e.download !== 'failed')
+  useLive(ev => ev.type === 'download' || (ev.type === 'episodes' && ev.removed.length > 0) || (ev.type === 'podcasts' && ev.removed.length > 0), reload, { fallbackMs: active ? 4000 : 60_000, minGap: 1000 })
   if (loading && !data) return <Loading />
   if (!data) return null
   return (

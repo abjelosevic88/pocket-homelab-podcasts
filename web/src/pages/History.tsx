@@ -4,11 +4,14 @@ import type { Episode } from '../lib/types'
 import { Confirm, Empty, Loading, PageHeader, useAsync } from '../components/ui'
 import { EpisodeList } from '../components/EpisodeRow'
 import { Icon } from '../components/icons'
+import { useLive } from '../lib/realtime'
 
 export default function History() {
   const [page, setPage] = useState(0)
   const LIMIT = 50
-  const { data, setData, loading } = useAsync(() => api.get<{ episodes: Episode[]; total: number }>(`${V1}/history?limit=${LIMIT}&offset=${page * LIMIT}`), [page])
+  const { data, setData, loading, reload } = useAsync(() => api.get<{ episodes: Episode[]; total: number }>(`${V1}/history?limit=${LIMIT}&offset=${page * LIMIT}`), [page])
+  // something played on another device moves to the top (positions update in place meanwhile)
+  useLive(ev => ev.type === 'history' || ev.type === 'progress' || (ev.type === 'episodes' && ev.removed.length > 0) || (ev.type === 'podcasts' && ev.removed.length > 0), reload, { minGap: 10_000 })
   const [clear, setClear] = useState(false)
   if (loading && !data) return <Loading />
   return (

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { api, V1 } from './api'
 import type { Settings, User } from './types'
+import { onRealtime } from './realtime'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -62,6 +63,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [reloadMeta])
 
   useEffect(() => { refresh().catch(() => setStatus({ needs_setup: false, auth_mode: 'local', authenticated: false, user: null, version: '', title: 'Pocket Podcasts' })) }, [refresh])
+  // settings saved in another tab or on another device
+  useEffect(() => onRealtime(ev => { if (ev.type === 'settings') api.get<Settings>(`${V1}/settings`).then(setSettings).catch(() => {}) }), [])
   useEffect(() => {
     const h = () => { setUser(null); setStatus(s => s ? { ...s, authenticated: false, user: null } : s) }
     window.addEventListener('pp:unauthorized', h)

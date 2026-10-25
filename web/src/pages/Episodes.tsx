@@ -6,6 +6,7 @@ import { Empty, Loading, MenuButton, PageHeader, Segmented, useAsync, useDebounc
 import { Icon } from '../components/icons'
 import { EpisodeList } from '../components/EpisodeRow'
 import { Select } from '../components/Select'
+import { useLive } from '../lib/realtime'
 
 const SORTS = [
   { value: '', label: 'Newest first' },
@@ -40,7 +41,9 @@ export default function Episodes() {
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }); setPage(0) }
   const clearFilters = () => { const n = new URLSearchParams(sp); ['kind', 'days', 'downloaded', 'podcast'].forEach(k => n.delete(k)); setSp(n, { replace: true }); setPage(0) }
   const url = `${V1}/episodes?status=${status}&kind=${kind}&days=${days}&downloaded=${downloaded}&sort=${sort}&podcast=${podcast}&q=${encodeURIComponent(dq)}&limit=${LIMIT}&offset=${page * LIMIT}`
-  const { data, setData, loading } = useAsync(() => api.get<{ episodes: Episode[]; total: number }>(url), [url])
+  const { data, setData, loading, reload } = useAsync(() => api.get<{ episodes: Episode[]; total: number }>(url), [url])
+  useLive(ev => ev.type === 'episodes' || ev.type === 'download' || ev.type === 'saved' || ev.type === 'queue' || (ev.type === 'history' && ev.episode_id === 0) || (ev.type === 'podcasts' && ev.removed.length > 0), reload, { minGap: 3000 })
+  useLive(ev => ev.type === 'podcasts', pods.reload, { fallbackMs: 0 })
   useEffect(() => { setPage(0) }, [dq])
   const setEps = useCallback((eps: Episode[]) => setData(d => d ? { ...d, episodes: eps } : d), [setData])
 

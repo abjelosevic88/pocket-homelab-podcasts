@@ -32,11 +32,29 @@ Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `
 
 ## Lists
 - `GET /home` — everything the Home page shows.
-- `GET /now-playing` → what is playing right now on any of your devices `{active, episode, position, duration, playing, rate, device, client, updated_at, server_time}`; `GET /now-playing/events` streams the same as server-sent events. Fed by `POST /episodes/{id}/progress` (send `client` from a browser tab so it can tell its own session apart); the device name comes from the Pocket Core device, the API token's name ("Iphone app" → iPhone) or the User-Agent.
+- `GET /now-playing` → what is playing right now on any of your devices `{active, episode, position, duration, playing, rate, device, client, updated_at, server_time}`; `GET /now-playing/events` streams the same as server-sent events (each also carries `type: "now_playing"`; `GET /events` below has them too). Fed by `POST /episodes/{id}/progress` (send `client` from a browser tab so it can tell its own session apart); the device name comes from the Pocket Core device, the API token's name ("Iphone app" → iPhone) or the User-Agent.
 - `GET /queue` · `PUT /queue {ids[]}` · `DELETE /queue` · `GET /queue/next?after=`
 - `GET /history?limit=&offset=` · `DELETE /history`
 - `GET /saved` · `GET /downloads` → `{pending[], done[], bytes, yt_dlp}`
 - `GET|POST /playlists` · `GET|PUT|DELETE /playlists/{id}` · `GET /playlists/{id}/episodes`
+
+## Live events
+`GET /events` is a server-sent event stream of everything that changes for the signed-in person, wherever it happened (another tab, the iPhone app, a feed refresh, a download worker). Each `data:` line is JSON with a `type`; events carry ids and a little state, not whole objects, so clients refetch what they show:
+
+| type | fields | when |
+|---|---|---|
+| `hello` | `server_time` (ms) | on connect |
+| `now_playing` | same as `GET /now-playing` | a progress report moved the now-playing session, or it went stale |
+| `progress` | `episode_id, podcast_id, position, completed, client, updated_at` | a progress report (`client` = the reporting tab's id, empty for apps), played / unplayed, forgotten |
+| `history` | `episode_id` (0 = all) | history cleared or forgotten |
+| `episodes` | `podcast_id, added[], updated[], removed[]` | refresh found episodes, picks, mark-all, members-only videos retired, episode removed |
+| `download` | `episode_id, podcast_id, state, error?` | queued, downloading, done, failed, culled, file deleted |
+| `podcasts` | `added[], updated[], removed[]` | subscribe, settings, favourite, artwork, refresh finished, unsubscribe |
+| `refresh` | `podcast_id, running, new?, error?` | a feed or channel refresh started / finished |
+| `queue` · `playlists` · `settings` | — | changed |
+| `saved` | `episode_id, saved` | saved / unsaved |
+
+Only the person's own events are sent; every subscription has one owner, so two people following the same feed never see each other's refreshes or downloads. Keep-alive comments every 25 s; a revoked sign-in ends the stream with `event: unauthorized`. A client that cannot keep up (64 events buffered) is disconnected and should reconnect and reload; at most 16 streams per person (429 beyond). The web app reconnects with backoff, reloads on reconnect, and polls slowly only while the stream is down.
 
 ## You
 - `GET /dashboard` — compact numbers for widgets (Homepage `customapi`): `podcasts, unplayed, queued, downloaded, downloaded_mb, listened_today_min, listened_week_min, now_playing, next_up, new_today, downloads_pending`.

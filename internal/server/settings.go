@@ -125,6 +125,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.live(me(r), "settings", nil)
 	st.FeedKey = cur.FeedKey
 	writeJSON(w, http.StatusOK, s.publicSettings(r, st))
 }
@@ -159,6 +160,7 @@ func (s *Server) handleRotateFeedKey(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "feed key")
 		return
 	}
+	s.live(me(r), "settings", nil)
 	st, _ := s.store.GetSettings(r.Context(), me(r))
 	writeJSON(w, http.StatusOK, s.publicSettings(r, st))
 }
@@ -375,5 +377,10 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 		pl.ID, pl.UserID = 0, uid
 		_ = s.store.CreatePlaylist(ctx, &pl)
 	}
+	// an import touches everything: tell the person's other tabs to reload
+	s.livePodcasts(uid, nil, nil, nil)
+	s.live(uid, "queue", nil)
+	s.live(uid, "playlists", nil)
+	s.live(uid, "history", liveObject{"episode_id": 0})
 	writeJSON(w, http.StatusOK, map[string]any{"added": added, "existing": existing, "progress": progress, "failed": failed})
 }

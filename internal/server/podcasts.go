@@ -312,6 +312,7 @@ func (s *Server) subscribe(ctx context.Context, uid int64, in subscribeInput) (*
 		}
 		return nil, err
 	}
+	s.livePodcasts(uid, []int64{p.ID}, nil, nil)
 	n, err := s.refreshPodcast(ctx, p, listing)
 	if err != nil {
 		s.log.Warn("first refresh failed", "podcast", p.Title, "err", err)
@@ -441,6 +442,7 @@ func (s *Server) handleUpdatePodcast(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "update podcast")
 		return
 	}
+	s.livePodcasts(me(r), nil, []int64{p.ID}, nil)
 	p, _ = s.store.GetPodcast(ctx, me(r), p.ID)
 	writeJSON(w, http.StatusOK, s.podcastOut(p))
 }
@@ -467,6 +469,8 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		_ = os.Remove(filepath.Join(s.cfg.ArtworkDir, p.ArtworkFile))
 	}
 	s.store.AddActivity(ctx, me(r), "unsubscribe", "Unsubscribed from "+p.Title, 0, 0)
+	s.livePodcasts(me(r), nil, nil, []int64{p.ID})
+	s.live(me(r), "queue", nil) // its episodes left the queue with it
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -512,6 +516,7 @@ func (s *Server) handleFavoritePodcast(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "favorite")
 		return
 	}
+	s.livePodcasts(me(r), nil, []int64{idParam(r, "id")}, nil)
 	writeJSON(w, http.StatusOK, map[string]bool{"favorite": in.Favorite})
 }
 
@@ -550,11 +555,15 @@ func (s *Server) handlePodcastMarkAll(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "list episodes")
 		return
 	}
+	var changed []int64
 	for _, e := range eps {
 		if e.Completed != in.Played {
-			_ = s.store.SetCompleted(r.Context(), me(r), e.ID, in.Played)
+			if s.store.SetCompleted(r.Context(), me(r), e.ID, in.Played) == nil {
+				changed = append(changed, e.ID)
+			}
 		}
 	}
+	s.liveEpisodes(me(r), p.ID, nil, changed, nil)
 	writeJSON(w, http.StatusOK, map[string]int{"episodes": len(eps)})
 }
 
@@ -584,6 +593,7 @@ func (s *Server) handlePodcastDownloadAll(w http.ResponseWriter, r *http.Request
 		}
 		if err := s.store.QueueDownload(r.Context(), e.ID); err == nil {
 			n++
+			s.live(me(r), "download", liveObject{"episode_id": e.ID, "podcast_id": p.ID, "state": store.DownloadQueued})
 		}
 	}
 	s.kickDownloads()
@@ -609,6 +619,7 @@ func (s *Server) handlePodcastDeleteFiles(w http.ResponseWriter, r *http.Request
 		}
 		s.removeEpisodeFile(e.FilePath)
 		_ = s.store.ClearEpisodeFile(r.Context(), e.ID, store.DownloadNone)
+		s.live(me(r), "download", liveObject{"episode_id": e.ID, "podcast_id": p.ID, "state": store.DownloadNone})
 		n++
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"removed": n})
@@ -665,6 +676,7 @@ func (s *Server) handleSetPodcastArtwork(w http.ResponseWriter, r *http.Request)
 		p.ArtworkURL = strings.TrimSpace(in.URL)
 		_ = s.store.UpdatePodcast(ctx, p)
 		s.cacheArtwork(ctx, p)
+		s.livePodcasts(me(r), nil, []int64{p.ID}, nil)
 		writeJSON(w, http.StatusOK, s.podcastOut(p))
 		return
 	}
@@ -700,6 +712,7 @@ func (s *Server) handleSetPodcastArtwork(w http.ResponseWriter, r *http.Request)
 	}
 	p.ArtworkFile = name
 	_ = s.store.SetPodcastArtworkFile(ctx, p.ID, name)
+	s.livePodcasts(me(r), nil, []int64{p.ID}, nil)
 	writeJSON(w, http.StatusOK, s.podcastOut(p))
 }
 
@@ -713,6 +726,7 @@ func (s *Server) handleDeletePodcastArtwork(w http.ResponseWriter, r *http.Reque
 		_ = os.Remove(filepath.Join(s.cfg.ArtworkDir, p.ArtworkFile))
 		_ = s.store.SetPodcastArtworkFile(r.Context(), p.ID, "")
 		p.ArtworkFile = ""
+		s.livePodcasts(me(r), nil, []int64{p.ID}, nil)
 	}
 	go s.cacheArtwork(context.Background(), p) // back to the feed's own
 	writeJSON(w, http.StatusOK, s.podcastOut(p))
