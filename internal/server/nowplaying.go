@@ -32,6 +32,7 @@ type nowSession struct {
 type nowHub struct {
 	mu       sync.Mutex
 	sessions map[int64]*nowSession
+	timers   map[int64]*time.Timer // one pending "went stale" check per person
 }
 
 const (
@@ -89,7 +90,13 @@ func (s *Server) recordPlayback(uid int64, e *store.Episode, position, listened 
 		after = nowStall + time.Second
 	}
 	at := cur.At
-	time.AfterFunc(after, func() {
+	if h.timers == nil {
+		h.timers = map[int64]*time.Timer{}
+	}
+	if t := h.timers[uid]; t != nil {
+		t.Stop()
+	}
+	h.timers[uid] = time.AfterFunc(after, func() {
 		h.mu.Lock()
 		same := h.sessions[uid] != nil && h.sessions[uid].At.Equal(at)
 		h.mu.Unlock()
