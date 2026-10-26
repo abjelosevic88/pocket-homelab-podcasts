@@ -406,7 +406,15 @@ a.stat:hover { border-color: var(--border-strong); box-shadow: var(--shadow); te
 .yt-dur { position: absolute; right: 5px; bottom: 5px; background: rgba(0, 0, 0, .8); color: #fff; font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: 4px; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; }
 .yt-dur.live { background: #dc2626; }
 .yt-videos.compact .yt-thumb { width: 120px; }
-.yt-kind-row { display: flex; }
+.yt-kind-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.have-chip { font-size: 10.5px; height: 18px; }
+.have-chip.dl { background: var(--accent-soft, #ffedd5); color: var(--accent, #c2410c); }
+.have-chip.started { background: #fef3c7; color: #92400e; }
+[data-theme="dark"] .have-chip.started { background: #45330d; color: #fcd34d; }
+.yt-watchbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, .35); }
+.yt-watchbar i { display: block; height: 100%; background: #dc2626; }
+.yt-watchbar ~ .yt-dur { bottom: 9px; }
+.yt-video.watched .yt-thumb img, .pv-row.watched img { opacity: .55; }
 .yt-badge { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; }
 .yt-badge.video { background: #fee2e2; color: #b91c1c; }
 .yt-badge.channel { background: #dbeafe; color: #1d4ed8; }

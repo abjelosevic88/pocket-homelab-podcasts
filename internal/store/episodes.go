@@ -506,28 +506,63 @@ func (s *Store) RetireMembersOnly(ctx context.Context, podcastID, id int64) bool
 	return tx.Commit() == nil
 }
 
-// EpisodesByYouTubeIDs maps video ids already in a person's library to an episode id.
-func (s *Store) EpisodesByYouTubeIDs(ctx context.Context, userID int64, ids []string) map[string]int64 {
-	out := map[string]int64{}
+// VideoState is what a person has of a YouTube video: the episode, whether
+// it was ever downloaded (the file may have been cleaned up since), whether
+// the file is on the server now, and how far they got.
+type VideoState struct {
+	EpisodeID  int64 `json:"episode_id"`
+	Downloaded bool  `json:"downloaded,omitempty"`
+	OnServer   bool  `json:"on_server,omitempty"`
+	Watched    bool  `json:"watched,omitempty"`
+	Position   int   `json:"position,omitempty"`
+	Duration   int   `json:"duration,omitempty"`
+}
+
+// EpisodesByYouTubeIDs maps video ids already in a person's library to what
+// they have of them. A video in two shows (a channel and Picks) reports the
+// furthest along of the two.
+func (s *Store) EpisodesByYouTubeIDs(ctx context.Context, userID int64, ids []string) map[string]VideoState {
+	out := map[string]VideoState{}
 	if len(ids) == 0 {
 		return out
 	}
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-	args := []any{userID}
+	args := []any{userID, userID}
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT e.youtube_id, e.id FROM episodes e JOIN podcasts p ON p.id = e.podcast_id WHERE p.user_id = ? AND e.youtube_id IN (`+ph+`)`, args...)
+	rows, err := s.DB.QueryContext(ctx, `SELECT e.youtube_id, e.id, e.downloaded_at <> '' OR e.download = 'done', e.download = 'done' AND e.file_path <> '',
+		COALESCE(pr.completed, 0), COALESCE(pr.position, 0), e.duration
+		FROM episodes e JOIN podcasts p ON p.id = e.podcast_id
+		LEFT JOIN progress pr ON pr.episode_id = e.id AND pr.user_id = ?
+		WHERE p.user_id = ? AND e.youtube_id IN (`+ph+`)`, args...)
 	if err != nil {
 		return out
 	}
 	defer rows.Close()
+	rank := func(v VideoState) int {
+		switch {
+		case v.Watched:
+			return 4
+		case v.Position > 0:
+			return 3
+		case v.OnServer:
+			return 2
+		case v.Downloaded:
+			return 1
+		}
+		return 0
+	}
 	for rows.Next() {
 		var y string
-		var id int64
-		if rows.Scan(&y, &id) == nil {
-			out[y] = id
+		var v VideoState
+		if rows.Scan(&y, &v.EpisodeID, &v.Downloaded, &v.OnServer, &v.Watched, &v.Position, &v.Duration) != nil {
+			continue
 		}
+		if old, ok := out[y]; ok && rank(old) >= rank(v) {
+			continue
+		}
+		out[y] = v
 	}
 	return out
 }

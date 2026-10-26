@@ -177,6 +177,10 @@ type itemJSON struct {
 	ytdlp.SearchResult
 	SubscribedID int64 `json:"subscribed_id,omitempty"` // playlist followed
 	EpisodeID    int64 `json:"episode_id,omitempty"`    // video already in the library
+	Downloaded   bool  `json:"downloaded,omitempty"`    // ever downloaded
+	OnServer     bool  `json:"on_server,omitempty"`     // the file is there now
+	Watched      bool  `json:"watched,omitempty"`
+	Position     int   `json:"position,omitempty"` // seconds in
 }
 
 // handleSearchChannels searches YouTube for channels, videos or playlists
@@ -255,7 +259,9 @@ func (s *Server) handleSearchChannels(w http.ResponseWriter, r *http.Request) {
 		if typ == "playlist" {
 			j.SubscribedID = byID[it.ID]
 		} else {
-			j.EpisodeID = have[it.ID]
+			if h, ok := have[it.ID]; ok {
+				j.EpisodeID, j.Downloaded, j.OnServer, j.Watched, j.Position = h.EpisodeID, h.Downloaded, h.OnServer, h.Watched, h.Position
+			}
 		}
 		out = append(out, j)
 	}
@@ -288,8 +294,27 @@ func (s *Server) handleListing(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, map[string]any{"title": e.Title, "duration": e.Duration, "date": ytdlp.Day(e.UploadDate, e.Timestamp), "guid": "yt:" + e.ID, "image": e.Thumbnail, "link": e.URL, "has_audio": !e.Live})
 	}
+	s.markHave(r.Context(), me(r), items)
 	// a full page means there may be more; members-only ones count as seen
 	writeJSON(w, http.StatusOK, map[string]any{"episodes": items, "more": len(l.Entries) >= limit, "next": offset + len(l.Entries)})
+}
+
+// markHave adds what the person has of each listed video ("yt:<id>" guids):
+// have = {episode_id, downloaded, on_server, watched, position}.
+func (s *Server) markHave(ctx context.Context, uid int64, items []map[string]any) {
+	var ids []string
+	for _, it := range items {
+		if g, _ := it["guid"].(string); strings.HasPrefix(g, "yt:") {
+			ids = append(ids, g[3:])
+		}
+	}
+	have := s.store.EpisodesByYouTubeIDs(ctx, uid, ids)
+	for _, it := range items {
+		g, _ := it["guid"].(string)
+		if h, ok := have[strings.TrimPrefix(g, "yt:")]; ok && strings.HasPrefix(g, "yt:") {
+			it["have"] = h
+		}
+	}
 }
 
 // livePicked says an episode landed in (or came back to) the person's Picks.

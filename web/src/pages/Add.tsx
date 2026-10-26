@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { Podcast, Preview, PreviewEpisode, SearchResult, YTChannel, YTItem } from '../lib/types'
+import type { Podcast, Preview, PreviewEpisode, SearchResult, VideoHave, YTChannel, YTItem } from '../lib/types'
 import { safeHTML } from '../components/Player'
 import { searchYouTube, YT_KINDS, type YTHit, type YTKind } from '../lib/youtube'
 import { Card, Empty, Field, Loading, MenuButton, Modal, PageHeader, Segmented, SettingRow, Switch, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
@@ -192,6 +192,22 @@ function ByURL({ kind }: { kind: 'rss' | 'youtube' }) {
  *  the notes, a listen sample and "Get" (one episode into Picks). */
 interface InfiniteList { more: boolean; loading: boolean; error: string; onMore: () => void }
 
+/** Where a person is with a video they already have: watched, part-played,
+ *  downloaded (the file may have been cleaned up since) or just listed. */
+function HaveChip({ have, always = false }: { have: VideoHave; always?: boolean }) {
+  const pct = have.duration && have.position ? Math.min(99, Math.round(have.position / have.duration * 100)) : 0
+  if (have.watched) return <span className="badge ok have-chip" title={have.downloaded ? 'Downloaded and watched' : 'Watched'}><Icon name="check" size={12} />{have.downloaded ? 'Downloaded · watched' : 'Watched'}</span>
+  if (have.position) return <span className="badge have-chip started" title={have.downloaded ? 'Downloaded, part played' : 'Part played'}>{have.downloaded ? 'Downloaded · ' : ''}{pct ? `${pct}% played` : 'Started'}</span>
+  if (have.downloaded) return <span className="badge have-chip dl" title={have.on_server ? 'The file is on your server' : 'Downloaded before; the file has been cleaned up since'}><Icon name="download" size={12} />Downloaded{have.on_server ? '' : ' · file removed'}</span>
+  return always ? <span className="badge have-chip" title="In your library, not downloaded">In library</span> : null
+}
+
+/** YouTube-style progress line along the bottom of a thumbnail. */
+function WatchBar({ have }: { have: VideoHave }) {
+  const pct = have.watched ? 100 : have.duration && have.position ? Math.min(100, have.position / have.duration * 100) : 0
+  return pct > 0 ? <span className="yt-watchbar" aria-hidden><i style={{ width: `${pct}%` }} /></span> : null
+}
+
 function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Preview; picked: Record<string, 'busy' | 'done'>; onPick: (guid: string, title: string) => void; infinite?: InfiniteList }) {
   const sentinel = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -209,6 +225,7 @@ function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Previ
   const dateOf = (d: string) => !d ? '' : d.length === 8 ? fmtDate(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`) : fmtDate(d)
   const key = (e: PreviewEpisode, i: number) => e.guid || String(i)
   const get = (e: PreviewEpisode) => {
+    if (e.have) return <Link to={`/episodes/${e.have.episode_id}`} onClick={ev => ev.stopPropagation()} title="Open it in your library"><HaveChip have={e.have} always /></Link>
     if (!e.guid || e.has_audio === false) return null
     if (picked[e.guid] === 'done') return <span className="badge ok">in Picks</span>
     return <button type="button" className="btn sm" onClick={ev => { ev.stopPropagation(); onPick(e.guid!, e.title) }} disabled={picked[e.guid] === 'busy'} title="Download just this one into your Picks">{picked[e.guid] === 'busy' ? '…' : <><Icon name="download" size={14} />Get</>}</button>
@@ -222,7 +239,7 @@ function PreviewEpisodes({ preview, picked, onPick, infinite }: { preview: Previ
           const meta = [dateOf(e.date), e.duration ? fmtDur(e.duration) : '', e.season ? `S${e.season}${e.episode ? ` E${e.episode}` : ''}` : e.episode ? `#${e.episode}` : ''].filter(Boolean).join(' · ')
           return (
             <li key={k} className={isOpen ? 'open' : ''}>
-              <div className="pv-row" role="button" tabIndex={0} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : k)} onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(isOpen ? null : k) } }}>
+              <div className={`pv-row ${e.have?.watched ? 'watched' : ''}`} role="button" tabIndex={0} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : k)} onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(isOpen ? null : k) } }}>
                 <Artwork src={e.image || preview.image} title={e.title} size="xs" />
                 <span className="pv-info"><span className="pv-title" title={e.title}>{e.title}</span><span className="muted small">{meta}</span></span>
                 {get(e)}
@@ -323,13 +340,14 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
         const isVideo = h.kind === 'video'
         const have = state ?? (isVideo ? v.episode_id : v.subscribed_id)
         return (
-          <li key={h.key} className="yt-video">
+          <li key={h.key} className={`yt-video ${isVideo && v.watched ? 'watched' : ''}`}>
             <a className="yt-thumb" href={v.url} target="_blank" rel="noreferrer" title="Open on YouTube">
               <img src={v.thumbnail} alt="" loading="lazy" />
+              {isVideo && v.episode_id ? <WatchBar have={{ episode_id: v.episode_id, watched: v.watched, position: v.position, duration: v.duration }} /> : null}
               {isVideo ? (v.duration ? <span className="yt-dur">{clock(v.duration)}</span> : v.live ? <span className="yt-dur live">LIVE</span> : null) : <span className="yt-dur"><Icon name="list" size={12} /></span>}
             </a>
             <div className="info">
-              <div className="yt-kind-row"><span className={`yt-badge ${h.kind}`}>{YT_LABEL[h.kind]}</span></div>
+              <div className="yt-kind-row"><span className={`yt-badge ${h.kind}`}>{YT_LABEL[h.kind]}</span>{isVideo && v.episode_id ? <HaveChip have={{ episode_id: v.episode_id, downloaded: v.downloaded, on_server: v.on_server, watched: v.watched, position: v.position, duration: v.duration }} /> : null}</div>
               <div className="nm" title={v.title}>{v.title}</div>
               <div className="meta">{[v.channel, v.views ? `${compact(v.views)} views` : '', isVideo && v.duration ? fmtDur(v.duration) : ''].filter(Boolean).join(' · ')}</div>
               {!compactList && isVideo && v.description && <div className="muted small clamp2">{v.description}</div>}
@@ -337,7 +355,7 @@ function YouTubeResults({ hits, compactList = false }: { hits: YTHit[]; compactL
             <div className="row yt-actions">
               {isVideo
                 ? (typeof have === 'number'
-                    ? <Link className="btn sm" to={`/episodes/${have}`}><Icon name="check" size={14} />In library</Link>
+                    ? <Link className="btn sm" to={`/episodes/${have}`}><Icon name="check" size={14} />{v.watched || v.downloaded || v.position ? 'Open' : 'In library'}</Link>
                     : <button type="button" className="btn primary sm" disabled={have === 'busy' || v.live} title="Download as audio into your Picks"
                         onClick={() => run(h.key, () => api.post<{ id: number }>(`${V1}/youtube/video`, { url: v.url }), () => `“${v.title}” is downloading into your Picks`)}>{have === 'busy' ? 'Adding…' : <><Icon name="download" size={14} />Get</>}</button>)
                 : <>
