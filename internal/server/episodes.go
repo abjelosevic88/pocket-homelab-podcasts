@@ -165,7 +165,7 @@ func (s *Server) ensureFile(ctx context.Context, e *store.Episode) (*store.Episo
 			bg, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 			defer cancel()
 			if ep, err := s.store.GetEpisodeAny(bg, id); err == nil {
-				s.downloadEpisode(bg, ep)
+				s.downloadEpisode(bg, ep, true)
 			}
 		}(e.ID)
 	}

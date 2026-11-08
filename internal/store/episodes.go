@@ -382,14 +382,20 @@ type CullCandidate struct {
 }
 
 // ListCullCandidates finds downloaded episodes past their retention. Episodes
-// in the person's queue or saved list are kept; played ones go first.
+// in the person's queue or saved list are kept, and so are the ones started
+// and not finished in the last 30 days (Continue listening: resuming one
+// would otherwise wait for a new fetch); played ones go first.
 func (s *Store) ListCullCandidates(ctx context.Context, now time.Time) ([]CullCandidate, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT e.id, p.user_id, e.file_path, e.title FROM episodes e JOIN podcasts p ON p.id = e.podcast_id
 		LEFT JOIN queue q ON q.episode_id = e.id AND q.user_id = p.user_id
 		LEFT JOIN saved sv ON sv.episode_id = e.id AND sv.user_id = p.user_id
+		LEFT JOIN progress pr ON pr.episode_id = e.id AND pr.user_id = p.user_id
 		WHERE e.download = 'done' AND p.retention_days > 0 AND e.downloaded_at <> ''
 		  AND e.downloaded_at < strftime('%Y-%m-%dT%H:%M:%SZ', ?, '-' || p.retention_days || ' days')
-		  AND q.episode_id IS NULL AND sv.episode_id IS NULL`, now.UTC().Format("2006-01-02 15:04:05"))
+		  AND q.episode_id IS NULL AND sv.episode_id IS NULL
+		  AND NOT (pr.episode_id IS NOT NULL AND pr.completed = 0 AND pr.position > 0
+		           AND pr.last_played_at <> '' AND julianday(pr.last_played_at) >= julianday(?, '-30 days'))`,
+		now.UTC().Format("2006-01-02 15:04:05"), now.UTC().Format("2006-01-02 15:04:05"))
 	if err != nil {
 		return nil, err
 	}

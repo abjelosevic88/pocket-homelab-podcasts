@@ -423,7 +423,7 @@ func (s *Server) downloadWorker(ctx context.Context, n int) {
 			}
 			continue
 		}
-		s.downloadEpisode(ctx, ep)
+		s.downloadEpisode(ctx, ep, false)
 	}
 }
 
@@ -450,7 +450,9 @@ func (s *Server) episodeBase(e *store.Episode) string {
 	return fmt.Sprintf("%s %s [%d]", date, safeName(e.Title), e.ID)
 }
 
-func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
+// onDemand: a player is waiting for the file (handleStream); the thumbnail
+// then comes afterwards from the episode artwork instead of yt-dlp's probe.
+func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode, onDemand bool) {
 	p, err := s.store.GetPodcastAny(ctx, e.PodcastID)
 	if err != nil {
 		_ = s.store.SetDownloadState(ctx, e.ID, store.DownloadFailed, "subscription gone")
@@ -463,7 +465,7 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 	var bytes int64
 	mimeType := "audio/mpeg"
 	if p.Kind == store.KindYouTube || e.YouTubeID != "" {
-		d, err := s.yt.DownloadAudio(ctx, e.Link, dir, base, p.SponsorBlock)
+		d, err := s.yt.DownloadAudio(ctx, e.Link, dir, base, p.SponsorBlock, !onDemand)
 		if err != nil {
 			s.downloadFailed(ctx, p, e, err)
 			return
@@ -495,6 +497,10 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 			sb = string(b)
 		}
 		_ = s.store.SetEpisodeExtras(ctx, e.ID, ch, sb)
+		if d.Thumbnail == "" && e.ArtworkURL != "" {
+			thumb := strings.TrimSuffix(filepath.Join(s.cfg.MediaDir, rel), filepath.Ext(rel)) + ".jpg"
+			go s.fetchThumbnail(e.ArtworkURL, thumb)
+		}
 	} else {
 		var err error
 		rel, bytes, mimeType, err = s.fetchEnclosure(ctx, e, dir, base)
@@ -516,6 +522,39 @@ func (s *Server) downloadEpisode(ctx context.Context, e *store.Episode) {
 	s.store.AddActivity(ctx, p.UserID, "download", fmt.Sprintf("Downloaded “%s” (%s) — %.1f MB", e.Title, p.Title, float64(bytes)/1048576), p.ID, e.ID)
 
 	s.log.Info("downloaded", "podcast", p.Title, "episode", e.Title, "mb", bytes>>20)
+}
+
+// fetchThumbnail saves an episode's artwork next to its file (on-demand
+// fetches skip yt-dlp's thumbnail step). A failure only leaves the artwork
+// URL in use.
+func (s *Server) fetchThumbnail(src, dst string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+	if err != nil {
+		return
+	}
+	res, err := s.http.Do(req)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "image/jpeg") {
+		return
+	}
+	tmp := dst + ".part"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return
+	}
+	_, err = io.Copy(f, io.LimitReader(res.Body, 8<<20))
+	if cerr := f.Close(); err != nil || cerr != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	if os.Rename(tmp, dst) != nil {
+		_ = os.Remove(tmp)
+	}
 }
 
 // permanentFailure recognises errors a retry cannot fix (members-only,

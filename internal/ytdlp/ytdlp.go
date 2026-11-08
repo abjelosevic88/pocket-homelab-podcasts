@@ -321,7 +321,9 @@ type Download struct {
 // DownloadAudio fetches one video as m4a into dir using base as the file
 // name (without extension). With sponsorblock the SponsorBlock segments are
 // recorded too (they are not cut out of the file; the player skips them).
-func (r *Runner) DownloadAudio(ctx context.Context, videoURL, dir, base string, sponsorblock bool) (*Download, error) {
+// Without thumbnail the best-thumbnail probe (one request per missing size,
+// about 0.7 s) is skipped: a listener is waiting for an on-demand fetch.
+func (r *Runner) DownloadAudio(ctx context.Context, videoURL, dir, base string, sponsorblock, thumbnail bool) (*Download, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -330,8 +332,11 @@ func (r *Runner) DownloadAudio(ctx context.Context, videoURL, dir, base string, 
 	tmpl := filepath.Join(dir, base+".%(ext)s")
 	args := append(r.common(), "--no-playlist", "--newline",
 		"-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a", "--audio-quality", "0",
-		"--embed-metadata", "--write-info-json", "--write-thumbnail", "--convert-thumbnails", "jpg",
+		"--embed-metadata", "--write-info-json",
 		"--print", "after_move:filepath", "-o", tmpl)
+	if thumbnail {
+		args = append(args, "--write-thumbnail", "--convert-thumbnails", "jpg")
+	}
 	if sponsorblock {
 		args = append(args, "--sponsorblock-mark", "all")
 	}
