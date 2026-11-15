@@ -140,7 +140,9 @@ func (f EpisodeFilter) build() (string, []any) {
 	case "saved":
 		order = "sv.created_at DESC"
 	case "downloaded":
-		order = "e.downloaded_at DESC"
+		// Arrival order: an episode still downloading (or whose download failed) has no
+		// downloaded_at yet and ranks by when it was added, not after everything else.
+		order = "COALESCE(NULLIF(e.downloaded_at, ''), e.created_at) DESC, e.id DESC"
 	case "pending":
 		order = "CASE e.download WHEN 'downloading' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, e.id"
 	}
