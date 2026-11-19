@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -311,15 +312,24 @@ func (s *Server) handleExportJSON(w http.ResponseWriter, r *http.Request) {
 
 // handleImportJSON subscribes to the podcasts of an export (or of the
 // PinePods importer script) and restores progress, saved and queued episodes.
+// It only adds: podcasts already followed and playlists already there (by
+// name) are left as they are, so a second run of the same file changes nothing.
+// The body is the JSON itself, or a multipart "file".
 func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
+	data, err := readUpload(r, "file", importJSONMax)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var ex Export
-	if err := decode(r, &ex); err != nil {
+	if err := json.Unmarshal(data, &ex); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	ctx, uid := r.Context(), me(r)
-	added, existing, progress := 0, 0, 0
-	var failed []string
+	added, existing, progress, playlists := 0, 0, 0, 0
+	failed := []string{}
+	newID := map[int64]int64{} // podcast id in the file → id here
 	for _, ep := range ex.Podcasts {
 		if ep.FeedURL == "" || ep.FeedURL == PicksFeedURL {
 			continue
@@ -339,6 +349,9 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 			added++
 		} else {
 			existing++
+		}
+		if ep.ID != 0 {
+			newID[ep.ID] = p.ID
 		}
 		if len(ep.Episodes) == 0 {
 			continue
@@ -373,14 +386,39 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	have := map[string]bool{}
+	if mine, err := s.store.ListPlaylists(ctx, uid); err == nil {
+		for _, pl := range mine {
+			have[strings.ToLower(strings.TrimSpace(pl.Name))] = true
+		}
+	}
 	for _, pl := range ex.Playlists {
-		pl.ID, pl.UserID = 0, uid
-		_ = s.store.CreatePlaylist(ctx, &pl)
+		name := strings.ToLower(strings.TrimSpace(pl.Name))
+		if name == "" || have[name] {
+			continue
+		}
+		// a playlist names podcasts by their id in the file; map them to
+		// the ones here, and leave out a playlist none of whose podcasts came
+		// along (an empty list would mean "every podcast")
+		ids := []int64{}
+		for _, id := range pl.PodcastIDs {
+			if n, ok := newID[id]; ok {
+				ids = append(ids, n)
+			}
+		}
+		if len(pl.PodcastIDs) > 0 && len(ids) == 0 {
+			continue
+		}
+		pl.ID, pl.UserID, pl.PodcastIDs = 0, uid, ids
+		if err := s.store.CreatePlaylist(ctx, &pl); err == nil {
+			have[name] = true
+			playlists++
+		}
 	}
 	// an import touches everything: tell the person's other tabs to reload
 	s.livePodcasts(uid, nil, nil, nil)
 	s.live(uid, "queue", nil)
 	s.live(uid, "playlists", nil)
 	s.live(uid, "history", liveObject{"episode_id": 0})
-	writeJSON(w, http.StatusOK, map[string]any{"added": added, "existing": existing, "progress": progress, "failed": failed})
+	writeJSON(w, http.StatusOK, map[string]any{"added": added, "existing": existing, "progress": progress, "playlists": playlists, "failed": failed})
 }

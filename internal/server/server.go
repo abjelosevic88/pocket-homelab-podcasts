@@ -299,6 +299,8 @@ func (s *Server) Router() http.Handler {
 			r.Get("/export.json", s.handleExportJSON)
 			r.Post("/import/opml", s.handleImportOPML)
 			r.Post("/import", s.handleImportJSON)
+			r.Post("/import/youtube.csv", s.handleImportYouTubeCSV)
+			r.Get("/pocket/portable", portable.Handler())
 		})
 	})
 
@@ -422,6 +424,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Publishes: []string{"podcasts.subscribed", "podcasts.unsubscribed", "podcasts.episode_added", "podcasts.played", "podcasts.finished", "podcasts.downloaded"},
 		Offers:    linkOffers,
 		Uses:      []core.Use{notesUse},
+		Portable:  portable,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.cfg.BaseURL + "/api/v1/auth/oidc/callback"}}

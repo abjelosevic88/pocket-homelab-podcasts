@@ -61,7 +61,8 @@ Only the person's own events are sent; every subscription has one owner, so two 
 - `GET /stats` · `GET /activity?kind=&limit=`
 - `GET|PUT /settings` · `GET /settings/system` · `POST /settings/notify/test` · `POST /settings/feed-key` · `POST /settings/ytdlp/update` (admin)
 - `GET /auth/me` · `PUT /auth/me` · `GET /tokens` · `POST /tokens {name}` · `DELETE /tokens/{id}`
-- `GET /export.opml` · `GET /export.json` · `POST /import/opml` (multipart `file` or raw body) · `POST /import` (the JSON export) · `GET /backup` (admin)
+- `GET /export.opml` · `GET /export.json` · `POST /import/opml` (multipart `file` or raw body) · `POST /import` (the JSON export, raw or multipart `file`) · `POST /import/youtube.csv` (Google Takeout's YouTube `subscriptions.csv`, multipart `file`: follows each channel) · `GET /backup` (admin). Imports only add; a second run of the same file changes nothing.
+- `GET /pocket/portable`: what Pocket Move may copy out and bring in (link scopes `move:export`, `move:import`)
 
 ## Public feeds (no login)
 - `GET /feed/{key}/` — HTML index of your feeds

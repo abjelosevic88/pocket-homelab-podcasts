@@ -21,6 +21,24 @@ var linkOffers = []core.Offer{
 	{Scope: "queue:write", Name: "Add to your queue", Description: "Put an episode in your Up next queue."},
 }
 
+// portable is what Pocket Move may copy out and bring in for a person
+// (docs/move.md in pocket-homelab-core); Register adds move:export/import.
+var portable = &core.Portable{
+	Exports: []core.PortableExport{
+		{Path: "/api/v1/export.json", File: "podcasts.json", Kind: core.KindPocket, Title: "Your subscriptions with their settings, where you were in each episode, saved and queued episodes, and your playlists"},
+		{Path: "/api/v1/export.opml", File: "podcasts.opml", Kind: core.KindOPMLPodcast, Title: "Your subscriptions as OPML, for any podcast app"},
+	},
+	Imports: []core.PortableImport{
+		{Path: "/api/v1/import", Kind: core.KindPocket, ContentType: "application/json", MaxBytes: importJSONMax, Title: "Subscribes to the podcasts from another box and brings back progress, saved and queued episodes and playlists; what you already follow is left alone"},
+		{Path: "/api/v1/import/opml", Kind: core.KindOPMLPodcast, Form: "file", MaxBytes: importOPMLMax, Title: "Subscribes to every podcast in the OPML file; ones you already follow are skipped"},
+		{Path: "/api/v1/import/youtube.csv", Kind: kindYouTubeSubscriptions, Form: "file", MaxBytes: importOPMLMax, Title: "YouTube subscriptions (Google Takeout): follows each channel as a podcast; ones you already follow are skipped"},
+	},
+}
+
+// kindYouTubeSubscriptions is Google Takeout's YouTube subscriptions.csv
+// ("Channel Id,Channel Url,Channel Title"); Pocket Move routes it here.
+const kindYouTubeSubscriptions = "youtube-subscriptions-csv"
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -43,6 +61,9 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
+	if portable.LinkAllows(scopes, r) {
+		return true
+	}
 	for _, lr := range linkRoutes {
 		if !strings.Contains(" "+lr.methods+" ", " "+r.Method+" ") || !lr.path.MatchString(r.URL.Path) {
 			continue

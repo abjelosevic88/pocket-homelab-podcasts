@@ -753,21 +753,10 @@ func (s *Server) handleExportOPML(w http.ResponseWriter, r *http.Request) {
 // handleImportOPML subscribes to every feed in an OPML file (multipart "file"
 // or raw body). YouTube URLs in it become YouTube subscriptions.
 func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
-	var data []byte
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-		if err := r.ParseMultipartForm(8 << 20); err != nil {
-			writeErr(w, http.StatusBadRequest, "file too large")
-			return
-		}
-		f, _, err := r.FormFile("file")
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "file is required")
-			return
-		}
-		defer f.Close()
-		data, _ = io.ReadAll(io.LimitReader(f, 8<<20))
-	} else {
-		data, _ = io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	data, err := readUpload(r, "file", importOPMLMax)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	entries, err := feed.ParseOPML(data)
 	if err != nil {
@@ -776,13 +765,18 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := me(r)
 	added, skipped := 0, 0
-	var failed []string
+	failed := []string{}
 	for _, e := range entries {
 		if ex, _ := s.store.FindPodcastByFeed(r.Context(), uid, e.FeedURL); ex != nil {
 			skipped++
 			continue
 		}
 		if _, err := s.subscribe(r.Context(), uid, subscribeInput{URL: e.FeedURL, Title: e.Title}); err != nil {
+			var se *subscribeError
+			if errors.As(err, &se) && se.status == http.StatusConflict {
+				skipped++ // already followed under its normalised address
+				continue
+			}
 			failed = append(failed, e.Title+": "+err.Error())
 			continue
 		}
