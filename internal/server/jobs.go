@@ -222,7 +222,7 @@ func (s *Server) refreshRSS(ctx context.Context, p *store.Podcast, first bool) (
 func (s *Server) refreshYouTube(ctx context.Context, p *store.Podcast, l *ytdlp.Listing, first bool) ([]store.Episode, []int64, error) {
 	if l == nil {
 		var err error
-		if l, err = s.yt.Index(ctx, p.FeedURL, s.cfg.YouTubeIndexLimit); err != nil {
+		if l, err = s.yt.Index(ctx, ytdlp.SourceURL(p.FeedURL, p.YouTubeKind, p.YouTubeID), s.cfg.YouTubeIndexLimit); err != nil {
 			return nil, nil, err
 		}
 	}

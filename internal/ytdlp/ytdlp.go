@@ -159,6 +159,15 @@ func Classify(raw string) (kind, normalized, id string, err error) {
 	return "", "", "", errors.New("unrecognised YouTube URL (use a channel, playlist or video link)")
 }
 
+// SourceURL is what to index for a followed source. A channel with a known
+// UC… id is fetched by that id: handles (@name) get renamed, the id never does.
+func SourceURL(feedURL, kind, id string) string {
+	if kind == KindChannel && strings.HasPrefix(id, "UC") && len(id) == 24 {
+		return "https://www.youtube.com/channel/" + id + "/videos"
+	}
+	return feedURL
+}
+
 // Entry is one video in a listing.
 type Entry struct {
 	ID          string

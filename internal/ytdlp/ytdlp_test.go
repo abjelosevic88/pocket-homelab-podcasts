@@ -23,3 +23,17 @@ func TestClassify(t *testing.T) {
 		t.Error("vimeo accepted")
 	}
 }
+
+func TestSourceURL(t *testing.T) {
+	// a renamed handle must not break a followed channel: index by its id
+	if got := SourceURL("https://www.youtube.com/@t3dotgg/videos", KindChannel, "UCbRP3c757lWg9M-U7TyEkXA"); got != "https://www.youtube.com/channel/UCbRP3c757lWg9M-U7TyEkXA/videos" {
+		t.Fatalf("channel: %s", got)
+	}
+	if got := SourceURL("https://www.youtube.com/@x/videos", KindChannel, ""); got != "https://www.youtube.com/@x/videos" {
+		t.Fatalf("no id: %s", got)
+	}
+	pl := "https://www.youtube.com/playlist?list=PLabc"
+	if got := SourceURL(pl, KindPlaylist, "PLabc"); got != pl {
+		t.Fatalf("playlist: %s", got)
+	}
+}
