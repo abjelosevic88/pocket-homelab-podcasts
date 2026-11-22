@@ -402,6 +402,15 @@ function Tokens() {
           )) : data ? <p className="muted">No tokens yet.</p> : <Loading />}
         </div>
       </Section>
+      <Section title="iPhone Shortcut: get a YouTube video" icon="download" sub="Share a video from the YouTube app and it downloads into your Picks, the same as Get on the Add page.">
+        <ol className="set-steps">
+          <li>Create a token above (e.g. <i>iPhone Shortcut</i>) and copy it.</li>
+          <li>In Shortcuts, make a new shortcut. In its <b>ⓘ</b> details, turn on <b>Show in Share Sheet</b> and let it receive <b>URLs</b> and <b>Text</b>.</li>
+          <li>Add <b>Get Contents of URL</b> with this address, Method <b>POST</b>, a header <code>Authorization</code> = <code>Bearer &lt;your token&gt;</code>, and Request Body <b>JSON</b> with a text field <code>url</code> = <b>Shortcut Input</b>.</li>
+          <li>Add <b>Get Dictionary Value</b> <code>title</code>, then <b>Show Notification</b> “Downloading …”. If it fails, the answer has an <code>error</code> instead.</li>
+        </ol>
+        <CopyField value={`${location.origin}${V1}/youtube/video`} label="Address" />
+      </Section>
       {del && <Confirm title={`Revoke “${del.name}”?`} message="Anything using this token stops working immediately." confirmLabel="Revoke" onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/tokens/${del.id}`); setDel(null); reload() }} />}
     </div>
   )

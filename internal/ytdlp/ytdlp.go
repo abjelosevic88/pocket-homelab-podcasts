@@ -159,6 +159,37 @@ func Classify(raw string) (kind, normalized, id string, err error) {
 	return "", "", "", errors.New("unrecognised YouTube URL (use a channel, playlist or video link)")
 }
 
+var reURL = regexp.MustCompile(`https?://\S+`)
+
+// VideoFromShare finds a YouTube video in what a share sheet hands over:
+// a bare link (youtu.be/…?si=…, shorts, m./music.youtube.com) or a text
+// with a link in it ("Check this out: https://…"). A video link that also
+// carries a playlist (…&list=…) is still the video.
+func VideoFromShare(text string) (normalized, id string, err error) {
+	text = strings.TrimSpace(text)
+	for _, u := range reURL.FindAllString(text, -1) {
+		if m := reVideo.FindStringSubmatch(u); m != nil {
+			return "https://www.youtube.com/watch?v=" + m[1], m[1], nil
+		}
+	}
+	if m := reVideo.FindStringSubmatch(text); m != nil {
+		return "https://www.youtube.com/watch?v=" + m[1], m[1], nil
+	}
+	if strings.ContainsAny(text, " \n") {
+		if us := reURL.FindAllString(text, 1); len(us) > 0 {
+			text = us[0]
+		}
+	}
+	kind, _, _, err := Classify(text)
+	if err != nil {
+		return "", "", err
+	}
+	if kind != KindVideo {
+		return "", "", errors.New("that is a channel or playlist: subscribe to it instead")
+	}
+	return "", "", errors.New("unrecognised YouTube video link")
+}
+
 // SourceURL is what to index for a followed source. A channel with a known
 // UC… id is fetched by that id: handles (@name) get renamed, the id never does.
 func SourceURL(feedURL, kind, id string) string {

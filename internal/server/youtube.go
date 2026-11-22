@@ -43,13 +43,9 @@ func (s *Server) handleAddVideo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "url is required")
 		return
 	}
-	kind, norm, id, err := ytdlp.Classify(in.URL)
+	norm, id, err := ytdlp.VideoFromShare(in.URL)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if kind != ytdlp.KindVideo {
-		writeErr(w, http.StatusBadRequest, "that is a channel or playlist: subscribe to it instead")
 		return
 	}
 	if !s.ytAvailable() {
