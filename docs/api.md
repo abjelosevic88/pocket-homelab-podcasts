@@ -1,6 +1,6 @@
 # API
 
-Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `Authorization: Bearer <token>` (Settings → API tokens; a token acts as the person who made it). Pocket Core device tokens (`pcd_`) and link tokens (`pcx_`, scopes `podcasts:read`, `history:read`, `queue:write`) are accepted when `CORE_URL` is set.
+Base path `/api/v1`. JSON in and out. Authenticate with the browser session or `Authorization: Bearer <token>` (Settings → API tokens; a token acts as the person who made it). Pocket Core device tokens (`pcd_`) and link tokens (`pcx_`, scopes `podcasts:read`, `history:read`, `queue:write`, and `pocket:search`, `pocket:day`, `pocket:widget`, `pocket:capture` for the one route each under [For Pocket Search, Day and Hub](#for-pocket-search-day-and-hub)) are accepted when `CORE_URL` is set.
 
 ## Discovery
 - `GET /search?q=&source=all|itunes|podcastindex` → `{results[], warnings[]}`; results carry `subscribed_id` when already followed.
@@ -63,6 +63,13 @@ Only the person's own events are sent; every subscription has one owner, so two 
 - `GET /auth/me` · `PUT /auth/me` · `GET /tokens` · `POST /tokens {name}` · `DELETE /tokens/{id}`
 - `GET /export.opml` · `GET /export.json` · `POST /import/opml` (multipart `file` or raw body) · `POST /import` (the JSON export, raw or multipart `file`) · `POST /import/youtube.csv` (Google Takeout's YouTube `subscriptions.csv`, multipart `file`: follows each channel) · `GET /backup` (admin). Imports only add; a second run of the same file changes nothing.
 - `GET /pocket/portable`: what Pocket Move may copy out and bring in (link scopes `move:export`, `move:import`)
+
+## For Pocket Search, Day and Hub
+The four routes every Pocket app answers in the same shape (Pocket Core's `docs/capabilities.md`). Each runs as the person signed in, or the person a link token acts for, and sees only what is theirs. The first three read what is stored: no feed is refreshed.
+- `GET /pocket/search?q=&limit=` (`pocket:search`) → `{items: [{id, title, snippet, kind, date, url, score}]}`: the shows you follow, by name or author (`id` `show:<id>`, `url` `/podcasts/<id>`, snippet "author · 124 episodes · 3 unplayed"), and your episodes, by title, show notes or show (`id` `episode:<id>`, `url` `/episodes/<id>`, snippet "show · 42 min · 12 min left" or "· played"). A show of that name comes first, then episodes with the words in the title, then the rest. `limit` 1–50, default 8.
+- `GET /pocket/day/{YYYY-MM-DD}[?tz=]` (`pocket:day`) → `{date, summary, items: [{id, time, end, title, sub, kind, minutes, done, url}], metrics}`: one item for each episode you listened to that day, from the same history as `GET /listens?date=`: `minutes` really listened, `sub` the show, `done` when you finished it that day. Days are the box's own (as in `/listens`); `tz` only says how `time` and `end` read.
+- `GET /pocket/widget` (`pocket:widget`) → `{line, items: [{id, title, detail, url}], url}`: up to four episodes you are in the middle of, the one played last first ("show · 12 min left"), then the newest unplayed ones, eight rows in all; `line` counts the unplayed episodes of the last seven days ("3 new episodes this week").
+- `POST /pocket/capture {request_id, kind: "link", text}` (`pocket:capture`) → `201 {id, title, url}`: keeps a pasted address. A YouTube video (any link `POST /youtube/video` takes) goes to your Picks and its download starts; any other address is followed as `POST /podcasts {url}` follows it (a podcast's feed, a YouTube channel or a playlist, with your defaults from Settings). Both look the address up before they answer, so it takes a few seconds. The same `request_id` again answers the same and adds nothing; text without an address, or with two, is refused with `400 {error}`.
 
 ## Public feeds (no login)
 - `GET /feed/{key}/` — HTML index of your feeds

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/feed"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/search"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/store"
@@ -209,6 +211,9 @@ type subscribeInput struct {
 	Notify        bool    `json:"notify"`
 	PlaybackSpeed float64 `json:"playback_speed"`
 	PubDateMode   string  `json:"pub_date_mode"`
+
+	// kept, when given, runs in the transaction that adds the subscription.
+	kept func(*sql.Tx, *store.Podcast) error
 }
 
 func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
@@ -305,9 +310,13 @@ func (s *Server) subscribe(ctx context.Context, uid int64, in subscribeInput) (*
 		}
 		p.Author, p.Description, p.ArtworkURL, p.SiteURL, p.Language, p.Categories, p.Explicit = f.Author, f.Description, f.Image, f.Link, f.Language, strings.Join(f.Categories, ", "), f.Explicit
 	}
-	if err := s.store.CreatePodcast(ctx, p, s.personEvent(ctx, uid, func() (string, string, map[string]any) {
+	after := []core.CommitHook{s.personEvent(ctx, uid, func() (string, string, map[string]any) {
 		return "podcasts.subscribed", p.Title, map[string]any{"podcast_id": p.ID, "title": p.Title, "kind": p.Kind, "url": p.FeedURL}
-	})); err != nil {
+	})}
+	if in.kept != nil {
+		after = append(after, func(tx *sql.Tx) error { return in.kept(tx, p) })
+	}
+	if err := s.store.CreatePodcast(ctx, p, after...); err != nil {
 		if errors.Is(err, store.ErrConflict) {
 			return nil, &subscribeError{http.StatusConflict, "you already follow this one"}
 		}

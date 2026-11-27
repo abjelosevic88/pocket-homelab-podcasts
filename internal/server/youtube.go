@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/feed"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-podcasts/internal/ytdlp"
@@ -43,46 +46,63 @@ func (s *Server) handleAddVideo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "url is required")
 		return
 	}
-	norm, id, err := ytdlp.VideoFromShare(in.URL)
+	e, _, err := s.addVideo(r.Context(), me(r), in.URL, nil)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		var se *subscribeError
+		if errors.As(err, &se) {
+			writeErr(w, se.status, se.msg)
+			return
+		}
+		s.fail(w, err, "add video")
 		return
+	}
+	ep, _ := s.store.GetEpisode(r.Context(), me(r), e.ID)
+	writeJSON(w, http.StatusCreated, s.episodeDetail(r, ep))
+}
+
+// addVideo puts one YouTube video in a person's "Picks" from what a share
+// sheet hands over (a link, or a text with one in it): it looks the video up,
+// adds it as an episode and queues its download. A video that is there
+// already is found again (and fetched again when its file is gone); created
+// says which of the two happened. kept, when given, runs in the transaction
+// that adds a new episode.
+func (s *Server) addVideo(ctx context.Context, uid int64, share string, kept func(*sql.Tx, *store.Episode) error) (e *store.Episode, created bool, err error) {
+	norm, id, err := ytdlp.VideoFromShare(share)
+	if err != nil {
+		return nil, false, &subscribeError{http.StatusBadRequest, err.Error()}
 	}
 	if !s.ytAvailable() {
-		writeErr(w, http.StatusBadRequest, "yt-dlp is not available on this box")
-		return
+		return nil, false, &subscribeError{http.StatusBadRequest, "yt-dlp is not available on this box"}
 	}
-	ctx := r.Context()
-	p, err := s.picksPodcast(ctx, me(r))
+	p, err := s.picksPodcast(ctx, uid)
 	if err != nil {
-		s.fail(w, err, "picks")
-		return
+		return nil, false, err
 	}
 	info, err := s.yt.VideoInfo(ctx, norm)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "channel's members") {
-			writeErr(w, http.StatusBadRequest, "this is a members-only video: only the channel's paying members can get it (see docs/youtube.md for using your member login)")
-			return
+			return nil, false, &subscribeError{http.StatusBadRequest, "this is a members-only video: only the channel's paying members can get it (see docs/youtube.md for using your member login)"}
 		}
-		writeErr(w, http.StatusBadGateway, err.Error())
-		return
+		return nil, false, &subscribeError{http.StatusBadGateway, err.Error()}
 	}
 	s.store.Unremove(ctx, p.ID, "yt:"+id) // got again on purpose
-	e := store.Episode{PodcastID: p.ID, GUID: "yt:" + id, Title: info.Title, Description: info.Description, Link: norm, EnclosureType: "audio/mp4",
+	e = &store.Episode{PodcastID: p.ID, GUID: "yt:" + id, Title: info.Title, Description: info.Description, Link: norm, EnclosureType: "audio/mp4",
 		Duration: info.Duration, PubDate: store.FormatTime(info.UploadDate), ArtworkURL: info.Thumbnail, YouTubeID: id}
-	if _, err := s.store.UpsertEpisode(ctx, &e); err != nil {
-		s.fail(w, err, "add video")
-		return
+	var after []core.CommitHook
+	if kept != nil {
+		after = append(after, func(tx *sql.Tx) error { return kept(tx, e) })
+	}
+	if created, err = s.store.UpsertEpisode(ctx, e, after...); err != nil {
+		return nil, false, err
 	}
 	if info.ChannelID != "" {
 		_ = s.store.SetEpisodeSource(ctx, e.ID, "https://www.youtube.com/channel/"+info.ChannelID+"/videos", info.Channel)
 	}
 	_ = s.store.QueueDownload(ctx, e.ID)
 	s.kickDownloads()
-	s.store.AddActivity(ctx, me(r), "pick", "Picked video “"+e.Title+"”", p.ID, e.ID)
-	s.livePicked(me(r), p.ID, e.ID)
-	ep, _ := s.store.GetEpisode(ctx, me(r), e.ID)
-	writeJSON(w, http.StatusCreated, s.episodeDetail(r, ep))
+	s.store.AddActivity(ctx, uid, "pick", "Picked video “"+e.Title+"”", p.ID, e.ID)
+	s.livePicked(uid, p.ID, e.ID)
+	return e, created, nil
 }
 
 // handlePickEpisode adds one episode of a feed to "Picks" without

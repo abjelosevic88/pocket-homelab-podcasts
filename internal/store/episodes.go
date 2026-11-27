@@ -45,6 +45,7 @@ type EpisodeFilter struct {
 	PodcastID   int64
 	PodcastIDs  []int64
 	Query       string
+	TitleOnly   bool   // Query looks at the episode's title only, not its notes or its show's name
 	Status      string // "" | unplayed | partial | played | unfinished (unplayed+partial)
 	Downloaded  int    // 0 any, 1 only downloaded, -1 not downloaded
 	Saved       bool
@@ -75,7 +76,10 @@ func (f EpisodeFilter) build() (string, []any) {
 		}
 		where = append(where, "e.podcast_id IN ("+strings.Join(ph, ",")+")")
 	}
-	if q := strings.TrimSpace(f.Query); q != "" {
+	if q := strings.TrimSpace(f.Query); q != "" && f.TitleOnly {
+		where = append(where, "e.title LIKE ?")
+		args = append(args, "%"+q+"%")
+	} else if q != "" {
 		where = append(where, "(e.title LIKE ? OR e.description LIKE ? OR p.title LIKE ?)")
 		args = append(args, "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}

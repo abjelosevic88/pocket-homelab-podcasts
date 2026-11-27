@@ -80,7 +80,7 @@ It replaces PinePods for people who want the same ideas with less machinery: no 
 - Built-in login, or `AUTH_MODE=proxy` behind Authelia / Authentik / Tinyauth, or "Sign in with Pocket Core" / any OpenID Connect provider.
 - API tokens for scripts and widgets (`GET /api/v1/dashboard` for Homepage), new-episode notifications through Apprise, ntfy or a webhook.
 
-**Pocket Core** (optional): registers on start, publishes `podcasts.subscribed / unsubscribed / episode_added / played / finished / downloaded`, accepts paired-phone tokens, offers `podcasts:read`, `history:read` and `queue:write` to other Pocket apps. Without `CORE_URL` nothing changes.
+**Pocket Core** (optional): registers on start, publishes `podcasts.subscribed / unsubscribed / episode_added / played / finished / downloaded`, accepts paired-phone tokens, offers `podcasts:read`, `history:read` and `queue:write` to other Pocket apps. It also says what the apps that bring everything together may ask of it, each for the person they act for: Pocket Search finds your episodes and the shows you follow (`!pod`, `!podcasts`), Pocket Day reads what you listened to on a day, Pocket Hub shows a Podcasts widget (what you are in the middle of, then the newest episodes) and can keep a pasted link: a YouTube video goes to your Picks, the address of a feed, a YouTube channel or a playlist is followed. Without `CORE_URL` nothing changes.
 
 ## Run it
 

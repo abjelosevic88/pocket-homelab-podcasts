@@ -301,6 +301,10 @@ func (s *Server) Router() http.Handler {
 			r.Post("/import", s.handleImportJSON)
 			r.Post("/import/youtube.csv", s.handleImportYouTubeCSV)
 			r.Get("/pocket/portable", portable.Handler())
+			r.Get("/pocket/search", core.SearchHandler(s.pocketSearch))
+			r.Get("/pocket/day/{date}", core.DayHandler(s.pocketDay))
+			r.Get("/pocket/widget", core.WidgetHandler(s.pocketWidget))
+			r.Post("/pocket/capture", capabilities.Capture.CaptureHandler(s.pocketCapture))
 		})
 	})
 
@@ -419,12 +423,12 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 	m := core.Manifest{
 		Slug: "podcasts", Name: "Pocket Podcasts",
 		Description: "A self-hosted podcast server: subscriptions, a player that remembers where you were, smart playlists, server-side downloads, YouTube channels as audio podcasts with SponsorBlock, and public feeds for any podcast app.",
-		Icon:        "/favicon.svg", Version: Version,
+		Icon:        "/favicon.svg", Version: Version, Category: "Media",
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "PODCASTS",
 		Publishes: []string{"podcasts.subscribed", "podcasts.unsubscribed", "podcasts.episode_added", "podcasts.played", "podcasts.finished", "podcasts.downloaded"},
 		Offers:    linkOffers,
 		Uses:      []core.Use{notesUse},
-		Portable:  portable,
+		Portable:  portable, Capabilities: capabilities,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.cfg.BaseURL + "/api/v1/auth/oidc/callback"}}

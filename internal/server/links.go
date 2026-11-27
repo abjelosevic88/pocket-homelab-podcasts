@@ -35,6 +35,18 @@ var portable = &core.Portable{
 	},
 }
 
+// capabilities is what Pocket Search, Pocket Day and Pocket Hub may ask of
+// Podcasts for a person (docs/capabilities.md in pocket-homelab-core);
+// Register adds the pocket:* offers. The routes are in capabilities.go.
+var capabilities = core.Capabilities{
+	Search: &core.Searchable{What: "Your episodes, by title and show notes, and the shows you follow, by name", Kinds: []string{"episode", "show"}, Bangs: []string{"pod", "podcasts"}},
+	Day:    &core.DayFeed{Label: "Podcasts", One: "episode", Many: "episodes", Unit: "min", What: "The episodes you listened to that day, how long for, and the ones you finished"},
+	Widget: &core.Widget{Title: "Podcasts", What: "The episodes you are in the middle of and the newest ones you have not played"},
+	Capture: &core.QuickCapture{Kinds: []core.CaptureKind{
+		{Kind: "link", Label: "Link", What: "A YouTube video is added to your Picks and downloaded; the address of a podcast feed, a YouTube channel or a playlist is followed", Fields: []string{}},
+	}},
+}
+
 // kindYouTubeSubscriptions is Google Takeout's YouTube subscriptions.csv
 // ("Channel Id,Channel Url,Channel Title"); Pocket Move routes it here.
 const kindYouTubeSubscriptions = "youtube-subscriptions-csv"
@@ -61,7 +73,7 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
-	if portable.LinkAllows(scopes, r) {
+	if portable.LinkAllows(scopes, r) || capabilities.LinkAllows(scopes, r) {
 		return true
 	}
 	for _, lr := range linkRoutes {
